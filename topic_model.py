@@ -34,6 +34,8 @@ class TopicModel:
         raw = raw.replace(" ", "").replace("\n", "")
         raw = raw.replace("Ⅴ", "5").replace("Ⅲ", "3")
         raw = raw.replace("五", "5").replace("三", "3")
+        raw = raw.replace("伍", "5").replace("叁", "3")
+        raw = raw.replace("⑤", "5").replace("③", "3")
         return "533" in raw
 
     async def _new_post_routine(self, post_id: int) -> None:
