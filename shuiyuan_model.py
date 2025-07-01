@@ -43,10 +43,10 @@ class ShuiyuanModel:
         :return: Initialized ShuiyuanModel instance.
         """
         instance = cls()
-        await instance.load_persistence_cookie(file_path)
+        await instance._load_persistence_cookie(file_path)
         return instance
 
-    async def update_cookies(self) -> None:
+    async def _update_cookies(self) -> None:
         # get the cookies
         self.session.headers.update({"User-Agent": default_user_agent})
         response = await self.session.get(get_cookies_url)
@@ -65,7 +65,7 @@ class ShuiyuanModel:
         csrf_token = match.group(1)
         self.session.headers.update({"X-CSRF-Token": csrf_token})
 
-    async def load_persistence_cookie(self, file_path: str) -> None:
+    async def _load_persistence_cookie(self, file_path: str) -> None:
         # check if the cookies file exists
         if not os.path.exists(file_path):
             raise CookiesFileNotFoundError(
@@ -81,7 +81,7 @@ class ShuiyuanModel:
             self.session.cookie_jar.update_cookies(cookies)
 
         # update the cookies in the session
-        await self.update_cookies()
+        await self._update_cookies()
 
     async def reply_to_post(
         self,

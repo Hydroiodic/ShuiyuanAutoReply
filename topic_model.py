@@ -1,7 +1,10 @@
 import asyncio
 import random
+from typing import Optional
 from shuiyuan_model import ShuiyuanModel
 from constants import max_random_value
+from tarot_model import TarotModel
+from tongyi_model import TongyiModel
 
 
 class TopicModel:
@@ -20,15 +23,18 @@ class TopicModel:
         self.topic_id = topic_id
         self.stream_list = []
 
+        self.tarot_model = TarotModel()
+        self.tongyi_model = TongyiModel()
+
         # We use a random empty value to aviod repeating the same post
         self.rand_value = random.randint(0, max_random_value - 1)
 
-    def _533_condition(self, raw: str) -> bool:
+    def _533_condition(self, raw: str) -> Optional[str]:
         """
         Check if the raw content of a post contains the string "533".
 
         :param raw: The raw content of the post.
-        :return: True if "533" is found, False otherwise.
+        :return: A string to reply to the post if the condition is met, otherwise None.
         """
         # At first convert some characters
         raw = raw.replace(" ", "").replace("\n", "")
@@ -36,7 +42,43 @@ class TopicModel:
         raw = raw.replace("五", "5").replace("三", "3")
         raw = raw.replace("伍", "5").replace("叁", "3")
         raw = raw.replace("⑤", "5").replace("③", "3")
-        return "533" in raw
+
+        # If the raw content does not contain "533", we return None
+        if "533" not in raw:
+            return None
+
+        # To avoid repeating the same post, we use a random value
+        self.rand_value = (self.rand_value + 1) % max_random_value
+        insert_pos = random.randint(0, self.rand_value)
+
+        text = ""
+        for _ in range(insert_pos):
+            text += "<!-- 鹊 -->\n"
+        text += "鹊\n"
+        for _ in range(insert_pos, self.rand_value + 1):
+            text += "<!-- 鹊 -->\n"
+        text += "---\n"
+        text += "[right]这是一条自动回复[/right]\n"
+        return text
+
+    def _tarot_condition(self, raw: str) -> Optional[str]:
+        """
+        Check if the raw content of a post contains the string "【塔罗牌】".
+
+        :param raw: The raw content of the post.
+        :return: A string to reply to the post if the condition is met, otherwise None.
+        """
+        # If the raw content contains "【塔罗牌】", we reply to the post
+        if "【塔罗牌】" not in raw:
+            return None
+
+        # OK, let's generate a reply
+        tarot_group = self.tarot_model.random_choose_tarot_group()
+
+        # Let GPT tell us the meaning of the tarot cards
+        text = str(tarot_group)
+        text += self.tongyi_model.consult_tarot_card(raw, tarot_group)
+        return text
 
     async def _new_post_routine(self, post_id: int) -> None:
         # First let's try to get the post details
@@ -48,18 +90,16 @@ class TopicModel:
             return
 
         # OK, check the content of the post
-        if self._533_condition(post_details.raw):
-            self.rand_value = (self.rand_value + 1) % max_random_value
-            insert_pos = random.randint(0, self.rand_value)
+        text = self._533_condition(post_details.raw)
+        if text is not None:
+            await self.model.reply_to_post(
+                text,
+                self.topic_id,
+                post_details.post_number,
+            )
 
-            text = ""
-            for _ in range(insert_pos):
-                text += "<!-- 鹊 -->\n"
-            text += "鹊\n"
-            for _ in range(insert_pos, self.rand_value + 1):
-                text += "<!-- 鹊 -->\n"
-            text += "---\n"
-            text += "[right]这是一条自动回复[/right]\n"
+        text = self._tarot_condition(post_details.raw)
+        if text is not None:
             await self.model.reply_to_post(
                 text,
                 self.topic_id,
