@@ -83,3 +83,30 @@ class TopicDetails:
     show_read_indicator: bool
     slow_mode_enabled_until: Optional[str]
     summarizable: bool
+
+
+@dataclass
+class ImageUploadPayload:
+    """
+    Represents the payload for an image upload.
+    """
+
+    upload_type: str
+    relativePath: str
+    name: str
+    type: str
+    sha1_checksum: str
+    file: bytes
+
+
+@dataclass
+class ImageUploadResponse:
+    """
+    Represents the response from an image upload.
+    """
+
+    id: int
+    url: str
+    original_filename: str
+    short_url: str
+    short_path: str

@@ -3,6 +3,7 @@ import random
 from typing import Optional
 from shuiyuan_model import ShuiyuanModel
 from constants import max_random_value
+from tarot_group_data import TarotResult, get_image_from_cache
 from tarot_model import TarotModel
 from tongyi_model import TongyiModel
 
@@ -29,7 +30,30 @@ class TopicModel:
         # We use a random empty value to aviod repeating the same post
         self.rand_value = random.randint(0, max_random_value - 1)
 
-    def _533_condition(self, raw: str) -> Optional[str]:
+    async def _upload_and_get_image_url(self, result: TarotResult) -> str:
+        """
+        Upload an image and return its URL.
+
+        :param result: The TarotResult containing the image path.
+        :return: The URL of the uploaded image.
+        """
+        # First let's check if the image is already cached
+        url = get_image_from_cache(result)
+        if url is not None:
+            return url
+
+        # Upload the image and get the response
+        response = await self.model.upload_image(
+            "tarot_img/"
+            + str(result.index)
+            + ("_rev" if result.is_reversed else "")
+            + ".jpg"
+        )
+
+        # Return the URL of the uploaded image
+        return response.short_url
+
+    async def _533_condition(self, raw: str) -> Optional[str]:
         """
         Check if the raw content of a post contains the string "533".
 
@@ -61,7 +85,7 @@ class TopicModel:
         text += "[right]这是一条自动回复[/right]\n"
         return text
 
-    def _tarot_condition(self, raw: str) -> Optional[str]:
+    async def _tarot_condition(self, raw: str) -> Optional[str]:
         """
         Check if the raw content of a post contains the string "【塔罗牌】".
 
@@ -73,19 +97,30 @@ class TopicModel:
             return None
 
         # OK, let's generate a reply
-        tarot_group = self.tarot_model.random_choose_tarot_group()
+        tarot_group = self.tarot_model.choose_tarot_group(raw.replace("【塔罗牌】", ""))
 
         # Let GPT tell us the meaning of the tarot cards
-        text = str(tarot_group)
-        text += '---\n\n[details="分析和建议"]\n'
+        text = '---\n\n[details="分析和建议"]\n'
         text += self.tongyi_model.consult_tarot_card(
             raw.replace("【塔罗牌】", ""), tarot_group
         ).replace("【塔罗牌】", "")
         text += "\n[/details]\n"
 
+        # Load image for the tarot group
+        tarot_result = tarot_group.tarot_results
+        urls = await asyncio.gather(
+            *[self._upload_and_get_image_url(result) for result in tarot_result]
+        )
+
+        # Now update the tarot results with the image URLs
+        for i, result in enumerate(tarot_result):
+            result.img_url = urls[i]
+
+        # Prepend the tarot group string
+        text = str(tarot_group) + text
         return text
 
-    def _help_condition(self, raw: str) -> Optional[str]:
+    async def _help_condition(self, raw: str) -> Optional[str]:
         """
         Check if the raw content of a post contains the string "帮助".
 
@@ -116,7 +151,7 @@ class TopicModel:
 
         # OK, check the content of the post
         # If the help condition is met, we should not check other conditions
-        text = self._help_condition(post_details.raw)
+        text = await self._help_condition(post_details.raw)
         if text is not None:
             await self.model.reply_to_post(
                 text,
@@ -125,7 +160,7 @@ class TopicModel:
             )
             return
 
-        text = self._533_condition(post_details.raw)
+        text = await self._533_condition(post_details.raw)
         if text is not None:
             await self.model.reply_to_post(
                 text,
@@ -133,7 +168,7 @@ class TopicModel:
                 post_details.post_number,
             )
 
-        text = self._tarot_condition(post_details.raw)
+        text = await self._tarot_condition(post_details.raw)
         if text is not None:
             await self.model.reply_to_post(
                 text,

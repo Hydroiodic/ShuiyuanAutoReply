@@ -2,12 +2,13 @@ import os
 import re
 import asyncio
 import pickle
-from typing import Optional
 import aiohttp
+import hashlib
 import http.cookies
 from constants import *
 from dacite import from_dict
-from objects import PostDetails, TopicDetails
+from typing import Optional
+from objects import ImageUploadResponse, PostDetails, TopicDetails
 
 
 class CookiesFileNotFoundError(Exception):
@@ -142,6 +143,41 @@ class ShuiyuanModel:
 
         data = await response.json()
         return from_dict(PostDetails, data)
+
+    async def upload_image(self, image_path: str) -> ImageUploadResponse:
+        """
+        Upload an image to the Shuiyuan server.
+
+        :param image_path: The path to the image file to upload.
+        :return: The URL of the uploaded image.
+        """
+        if not os.path.exists(image_path):
+            raise FileNotFoundError(f"Image file not found: {image_path}")
+
+        with open(image_path, "rb") as image_file:
+            # Read the image content
+            image_content = image_file.read()
+
+            form_data = aiohttp.FormData()
+            form_data.add_field("upload_type", "composer")
+            form_data.add_field("relative_path", "null")
+            form_data.add_field("type", "image/jpeg")
+            # Calculate the SHA1 checksum of the image
+            sha1sum = hashlib.sha1(image_content).hexdigest()
+            form_data.add_field("sha1sum", sha1sum)
+            form_data.add_field(
+                "file",
+                image_content,
+                filename=os.path.basename(image_path),
+                content_type="image/jpeg",
+            )
+
+            response = await self.session.post(upload_url, data=form_data)
+            if response.status != 200:
+                raise Exception(f"Failed to upload image: {await response.text()}")
+
+            data = await response.json()
+            return from_dict(ImageUploadResponse, data)
 
     async def close(self) -> None:
         """

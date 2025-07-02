@@ -1,6 +1,6 @@
 import json
 import random
-from typing import List
+from typing import List, Type
 from tarot_group_data import *
 
 
@@ -51,12 +51,41 @@ class TarotModel:
 
         return results
 
-    def random_choose_tarot_group(self) -> BaseTarotGroup:
+    def choose_tarot_group(self, question: str) -> BaseTarotGroup:
         """
-        Randomly select a group of tarot cards.
+        Select a group of tarot cards to answer a question.
+
+        :param question: The question to analyze.
+        :return: An instance of a tarot group class with selected tarot results.
         """
         # choose a group
-        group = random.choice(tarot_groups)()
+        group = self._select_tarot_group(question)()
         group.set_tarot_results(self._choose_tarot_card(group.card_count))
 
         return group
+
+    def _select_tarot_group(self, question: str) -> Type[BaseTarotGroup]:
+        """
+        Select the most suitable tarot group based on the question.
+        If the question contains the name of a tarot group, return that group.
+        Otherwise, return the one with the highest matching score.
+        If no group matches, return a random group.
+
+        :param question: The question to analyze.
+        :return: The selected tarot group class.
+        """
+
+        # First let's check if the question contains the name of any tarot group
+        for group_class in tarot_groups:
+            if group_class().group_name in question:
+                return group_class
+
+        # OK, let's calculate the match score for each group
+        scores = {}
+        for group_class in tarot_groups:
+            scores[group_class] = group_class.match_score(question)
+
+        best_group = max(scores.items(), key=lambda x: x[1])[0]
+        if scores[best_group] == 0:
+            return random.choice(tarot_groups)
+        return best_group
