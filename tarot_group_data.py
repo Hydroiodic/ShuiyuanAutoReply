@@ -68,3 +68,21 @@ class TimeTarotGroup(BaseTarotGroup):
         text += "\n"
 
         return text
+
+
+class YesOrNoGroup(BaseTarotGroup):
+    def __init__(self):
+        super().__init__("YesOrNo牌阵", "该牌阵由1张牌组成，代表问题的答案")
+        self.tarot_results = []
+        self.card_count = 1
+
+    def __str__(self) -> str:
+        text = self.base_info()
+        text += "抽牌结果如下：\n"
+        text += f"答案：{self._get_card_name(self.tarot_results[0])}\n"
+        text += "\n"
+
+        return text
+
+
+tarot_groups = [TimeTarotGroup, YesOrNoGroup]

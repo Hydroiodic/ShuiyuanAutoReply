@@ -55,8 +55,8 @@ class TarotModel:
         """
         Randomly select a group of tarot cards.
         """
-        # TODO: choose a group
-        group = TimeTarotGroup()
+        # choose a group
+        group = random.choice(tarot_groups)()
         group.set_tarot_results(self._choose_tarot_card(group.card_count))
 
         return group

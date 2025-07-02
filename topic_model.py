@@ -77,7 +77,32 @@ class TopicModel:
 
         # Let GPT tell us the meaning of the tarot cards
         text = str(tarot_group)
-        text += self.tongyi_model.consult_tarot_card(raw, tarot_group)
+        text += '---\n\n[details="分析和建议"]\n'
+        text += self.tongyi_model.consult_tarot_card(
+            raw.replace("【塔罗牌】", ""), tarot_group
+        ).replace("【塔罗牌】", "")
+        text += "\n[/details]\n"
+
+        return text
+
+    def _help_condition(self, raw: str) -> Optional[str]:
+        """
+        Check if the raw content of a post contains the string "帮助".
+
+        :param raw: The raw content of the post.
+        :return: A string to reply to the post if the condition is met, otherwise None.
+        """
+        # If the raw content does not contain "帮助", we return None
+        if "【帮助】" not in raw or "自动回复" in raw:
+            return None
+
+        # OK, let's generate a reply
+        text = "这是一个自动回复，帮助信息如下：\n"
+        text += "1. 输入【塔罗牌】+问题，可以进行塔罗牌占卜 :crystal_ball:\n"
+        text += "2. 输入533或某些变体，可以获得鹊的祝福 :bird:\n"
+        text += "3. 输入【帮助】，可以查看本帮助信息\n"
+        text += f"<!-- {random.sample('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 20)} -->\n"
+
         return text
 
     async def _new_post_routine(self, post_id: int) -> None:
@@ -90,6 +115,16 @@ class TopicModel:
             return
 
         # OK, check the content of the post
+        # If the help condition is met, we should not check other conditions
+        text = self._help_condition(post_details.raw)
+        if text is not None:
+            await self.model.reply_to_post(
+                text,
+                self.topic_id,
+                post_details.post_number,
+            )
+            return
+
         text = self._533_condition(post_details.raw)
         if text is not None:
             await self.model.reply_to_post(

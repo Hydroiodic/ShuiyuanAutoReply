@@ -11,7 +11,7 @@ async def main():
 
     async with await ShuiyuanModel.create() as model:
         # Let's try to get the post streams
-        topic_model = TopicModel(model, 387471)
+        topic_model = TopicModel(model, 388001)
         await topic_model.watch_routine()
 
 
