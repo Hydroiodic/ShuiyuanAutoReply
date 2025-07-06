@@ -1,3 +1,4 @@
+import re
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import List, Optional
@@ -113,14 +114,14 @@ class BaseTarotGroup:
         question_lower = question.lower()
         score = 0
         for keyword in cls.get_keywords():
-            if keyword in question_lower:
+            if re.search(keyword, question_lower) is not None:
                 score += 1
         return score
 
 
 class TimeTarotGroup(BaseTarotGroup):
     def __init__(self):
-        super().__init__("时间牌阵", "该牌阵由3张牌组成，分别代表过去、现在和未来")
+        super().__init__("时间牌阵", "该牌阵由3张牌组成，分别代表过去、现在和未来。")
         self.tarot_results = []
         self.card_count = 3
 
@@ -148,12 +149,25 @@ class TimeTarotGroup(BaseTarotGroup):
 
     @classmethod
     def get_keywords(cls) -> List[str]:
-        return ["过去", "现在", "未来", "时间", "发展", "变化", "历程", "趋势"]
+        return [
+            "过去",
+            "现在",
+            "未来",
+            "时间",
+            "时候",
+            "发展",
+            "变化",
+            "历程",
+            "趋势",
+            "年",
+            "月",
+            "周",
+        ]
 
 
 class YesOrNoGroup(BaseTarotGroup):
     def __init__(self):
-        super().__init__("YesOrNo", "该牌阵由1张牌组成，代表问题的答案")
+        super().__init__("YesOrNo", "该牌阵由1张牌组成，代表问题的答案。")
         self.tarot_results = []
         self.card_count = 1
 
@@ -177,14 +191,16 @@ class YesOrNoGroup(BaseTarotGroup):
     def get_keywords(cls) -> List[str]:
         return [
             "是否",
+            "能否",
+            "要不要",
             "会不会",
             "能不能",
-            "要不要",
-            "应该",
-            "可以",
-            "会吗",
-            "能吗",
-            "吗？",
+            "了吗",
+            r"应该.*吗",
+            r"可以.*吗",
+            r"要.*吗",
+            r"会.*吗",
+            r"能.*吗",
         ]
 
 
@@ -192,7 +208,7 @@ class SacredTriangleGroup(BaseTarotGroup):
     def __init__(self):
         super().__init__(
             "圣三角",
-            "该牌阵由3张牌组成，分别代表问题的原因、当前状况和结果",
+            "该牌阵由3张牌组成，分别代表问题的原因、当前状况和结果。",
         )
         self.tarot_results = []
         self.card_count = 3
@@ -218,13 +234,22 @@ class SacredTriangleGroup(BaseTarotGroup):
 
     @classmethod
     def get_keywords(cls) -> List[str]:
-        return ["为什么", "原因", "分析", "状况", "情况", "背景", "怎么回事"]
+        return [
+            "为什么",
+            "为啥",
+            "原因",
+            "分析",
+            "状况",
+            "情况",
+            "背景",
+            "怎么",
+        ]
 
 
 class DiamondExpansionGroup(BaseTarotGroup):
     def __init__(self):
         super().__init__(
-            "钻石展开法", "该牌阵由4张牌组成，分别代表现在、即将遇到的两个问题和结果"
+            "钻石展开法", "该牌阵由4张牌组成，分别代表现在、即将遇到的两个问题和结果。"
         )
         self.tarot_results = []
         self.card_count = 4
@@ -256,7 +281,15 @@ class DiamondExpansionGroup(BaseTarotGroup):
 
     @classmethod
     def get_keywords(cls) -> List[str]:
-        return ["问题", "困难", "挑战", "阻碍", "麻烦", "障碍", "解决"]
+        return [
+            "问题",
+            "困难",
+            "挑战",
+            "阻碍",
+            "麻烦",
+            "障碍",
+            "解决",
+        ]
 
 
 class LoverPyramidGroup(BaseTarotGroup):
@@ -264,7 +297,7 @@ class LoverPyramidGroup(BaseTarotGroup):
         super().__init__(
             "恋人金字塔",
             "该牌阵由4张牌组成，适用于爱情主题，"
-            "分别代表你的期望、恋人的期望、目前彼此的关系和未来彼此的关系",
+            "分别代表你的期望、恋人的期望、目前彼此的关系和未来彼此的关系。",
         )
         self.tarot_results = []
         self.card_count = 4
@@ -317,7 +350,7 @@ class SelfExplorationGroup(BaseTarotGroup):
         super().__init__(
             "自我探索",
             "该牌阵由4张牌组成，可以帮助你在某些处境中认清自己，"
-            "分别代表你所处的状态、你的外在表现、你的内在想法和你的潜意识",
+            "分别代表你所处的状态、你的外在表现、你的内在想法和你的潜意识。",
         )
         self.tarot_results = []
         self.card_count = 4
@@ -351,7 +384,24 @@ class SelfExplorationGroup(BaseTarotGroup):
 
     @classmethod
     def get_keywords(cls) -> List[str]:
-        return ["自己", "性格", "内心", "想法", "心理", "个性", "特点", "自我"]
+        return [
+            "经历",
+            "处境",
+            "运势",
+            "自己",
+            "性格",
+            "内心",
+            "想法",
+            "心理",
+            "个性",
+            "特点",
+            "自我",
+            r"我会.*吗",
+            r"我想.*吗",
+            r"我能.*吗",
+            r"我应该.*吗",
+            r"我可以.*吗",
+        ]
 
 
 class GypsyCrossGroup(BaseTarotGroup):
@@ -359,7 +409,7 @@ class GypsyCrossGroup(BaseTarotGroup):
         super().__init__(
             "吉普赛十字",
             "该牌阵由5张牌组成，适用于爱情主题，"
-            "分别代表对方的想法、你的想法、相处中存在的问题、二人目前的人文环境和二人关系发展的结果",
+            "分别代表对方的想法、你的想法、相处中存在的问题、二人目前的人文环境和二人关系发展的结果。",
         )
         self.tarot_results = []
         self.card_count = 5
@@ -395,20 +445,17 @@ class GypsyCrossGroup(BaseTarotGroup):
     @classmethod
     def get_keywords(cls) -> List[str]:
         return [
-            "对方",
-            "想法",
-            "问题",
-            "相处",
-            "环境",
-            "关系",
-            "发展",
-            "结果",
-            "爱情",
+            "恋爱",
             "感情",
+            "爱情",
+            "男友",
+            "女友",
+            "喜欢",
+            "暗恋",
+            "表白",
+            "恋人",
             "他",
             "她",
-            "对象",
-            "恋人",
             "鹊",
             "533",
         ]

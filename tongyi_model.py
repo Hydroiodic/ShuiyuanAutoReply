@@ -25,8 +25,9 @@ class TongyiModel:
         tarot_results_str = tarot_group.query_prompt()
         tarot_results_str += (
             "\n\n请根据这些塔罗牌的含义分析我上面的问题。"
-            "注意：需要结合每一张塔罗牌输出综合结果，语义简洁精炼，以一段话表示即可，"
-            "且必须结合我的问题来回答，并给出相应的建议。"
+            "注意：需要结合每一张塔罗牌输出综合结果，语义简洁精炼，每部分均不能超过一段话，"
+            "且必须结合我的问题来回答，并给出相应的建议，"
+            "解析和建议必须积极向上充满正能量。"
         )
 
         # Create a chat completion request with the tarot results and question

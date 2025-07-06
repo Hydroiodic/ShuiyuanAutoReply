@@ -6,13 +6,13 @@ from typing import List, Optional
 class User:
     id: int
     username: str
-    name: str
+    name: Optional[str]
 
 
 @dataclass
 class PostDetails:
     id: int
-    name: str
+    name: Optional[str]
     user_id: int
     username: str
     user_cakedate: Optional[str]

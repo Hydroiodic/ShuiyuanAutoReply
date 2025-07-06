@@ -1,11 +1,14 @@
 import asyncio
 import random
 from typing import Optional
+from objects import User
 from shuiyuan_model import ShuiyuanModel
 from constants import max_random_value
 from tarot_group_data import TarotResult, get_image_from_cache
 from tarot_model import TarotModel
 from tongyi_model import TongyiModel
+
+_auto_reply_tag = "<!-- 来自南瓜的自动回复 -->"
 
 
 class TopicModel:
@@ -27,8 +30,19 @@ class TopicModel:
         self.tarot_model = TarotModel()
         self.tongyi_model = TongyiModel()
 
-        # We use a random empty value to aviod repeating the same post
-        self.rand_value = random.randint(0, max_random_value - 1)
+    def _generate_random_string(self, length: int) -> str:
+        """
+        Generate a random string of a given length.
+
+        :param length: The length of the random string to generate.
+        :return: A random string of the specified length.
+        """
+        return "".join(
+            random.sample(
+                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+                k=length,
+            )
+        )
 
     async def _upload_and_get_image_url(self, result: TarotResult) -> str:
         """
@@ -67,25 +81,18 @@ class TopicModel:
         raw = raw.replace("伍", "5").replace("叁", "3")
         raw = raw.replace("⑤", "5").replace("③", "3")
 
-        # If the raw content does not contain "533", we return None
-        if "533" not in raw:
-            return None
+        # Generate a unique reply text
+        text = "鹊\n\n---\n[right]这是一条自动回复[/right]\n"
+        text += f"<!-- {self._generate_random_string(20)} -->\n"
+        text += _auto_reply_tag
 
-        # To avoid repeating the same post, we use a random value
-        self.rand_value = (self.rand_value + 1) % max_random_value
-        insert_pos = random.randint(0, self.rand_value)
+        # If the raw content contains "533", we return the text
+        if "我要谈恋爱" in raw or "533" in raw:
+            return text
 
-        text = ""
-        for _ in range(insert_pos):
-            text += "<!-- 鹊 -->\n"
-        text += "鹊\n"
-        for _ in range(insert_pos, self.rand_value + 1):
-            text += "<!-- 鹊 -->\n"
-        text += "---\n"
-        text += "[right]这是一条自动回复[/right]\n"
-        return text
+        return None
 
-    async def _tarot_condition(self, raw: str) -> Optional[str]:
+    async def _tarot_condition(self, raw: str, user: User) -> Optional[str]:
         """
         Check if the raw content of a post contains the string "【塔罗牌】".
 
@@ -103,7 +110,7 @@ class TopicModel:
         text = '---\n\n[details="分析和建议"]\n'
         text += self.tongyi_model.consult_tarot_card(
             raw.replace("【塔罗牌】", ""), tarot_group
-        ).replace("【塔罗牌】", "")
+        )
         text += "\n[/details]\n"
 
         # Load image for the tarot group
@@ -117,8 +124,13 @@ class TopicModel:
             result.img_url = urls[i]
 
         # Prepend the tarot group string
-        text = str(tarot_group) + text
-        return text
+        return (
+            f"你好！{user.name if user.name is not None else user.username}，"
+            f"欢迎来到南瓜的塔罗牌自助占卜小屋！请注意占卜结果仅供娱乐参考哦！\n\n"
+            + str(tarot_group)
+            + text
+            + _auto_reply_tag
+        )
 
     async def _help_condition(self, raw: str) -> Optional[str]:
         """
@@ -128,15 +140,16 @@ class TopicModel:
         :return: A string to reply to the post if the condition is met, otherwise None.
         """
         # If the raw content does not contain "帮助", we return None
-        if "【帮助】" not in raw or "自动回复" in raw:
+        if "【帮助】" not in raw:
             return None
 
         # OK, let's generate a reply
-        text = "这是一个自动回复，帮助信息如下：\n"
+        text = "帮助信息如下：\n"
         text += "1. 输入【塔罗牌】+问题，可以进行塔罗牌占卜 :crystal_ball:\n"
         text += "2. 输入533或某些变体，可以获得鹊的祝福 :bird:\n"
         text += "3. 输入【帮助】，可以查看本帮助信息\n"
-        text += f"<!-- {random.sample('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 20)} -->\n"
+        text += f"<!-- {self._generate_random_string(20)} -->\n"
+        text += _auto_reply_tag
 
         return text
 
@@ -147,6 +160,9 @@ class TopicModel:
         # If the member "raw" is not present, we should skip it
         if post_details.raw is None:
             print(f"Post {post_id} does not have raw content, skipping.")
+            return
+
+        if _auto_reply_tag in post_details.raw:
             return
 
         # OK, check the content of the post
@@ -168,7 +184,10 @@ class TopicModel:
                 post_details.post_number,
             )
 
-        text = await self._tarot_condition(post_details.raw)
+        text = await self._tarot_condition(
+            post_details.raw,
+            user=User(post_details.user_id, post_details.username, post_details.name),
+        )
         if text is not None:
             await self.model.reply_to_post(
                 text,
