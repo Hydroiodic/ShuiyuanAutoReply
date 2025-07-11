@@ -1,7 +1,7 @@
 import re
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -100,8 +100,8 @@ class BaseTarotGroup:
         )
 
     @classmethod
-    def get_keywords(cls) -> List[str]:
-        return []
+    def get_keywords(cls) -> Dict[str, float]:
+        return {}
 
     @classmethod
     def match_score(cls, question: str) -> int:
@@ -112,10 +112,10 @@ class BaseTarotGroup:
         :return: The match score, which is the count of keywords found in the question.
         """
         question_lower = question.lower()
-        score = 0
-        for keyword in cls.get_keywords():
+        score = 0.0
+        for keyword, weight in cls.get_keywords().items():
             if re.search(keyword, question_lower) is not None:
-                score += 1
+                score = max(score, weight)
         return score
 
 
@@ -148,21 +148,21 @@ class TimeTarotGroup(BaseTarotGroup):
         return text
 
     @classmethod
-    def get_keywords(cls) -> List[str]:
-        return [
-            "过去",
-            "现在",
-            "未来",
-            "时间",
-            "时候",
-            "发展",
-            "变化",
-            "历程",
-            "趋势",
-            "年",
-            "月",
-            "周",
-        ]
+    def get_keywords(cls) -> Dict[str, float]:
+        return {
+            "过去": 0.4,
+            "现在": 0.4,
+            "未来": 0.4,
+            "时间": 0.4,
+            "时候": 0.4,
+            "发展": 0.4,
+            "变化": 0.4,
+            "历程": 0.4,
+            "趋势": 0.4,
+            "年": 0.2,
+            "月": 0.2,
+            "周": 0.2,
+        }
 
 
 class YesOrNoGroup(BaseTarotGroup):
@@ -188,20 +188,20 @@ class YesOrNoGroup(BaseTarotGroup):
         return text
 
     @classmethod
-    def get_keywords(cls) -> List[str]:
-        return [
-            "是否",
-            "能否",
-            "要不要",
-            "会不会",
-            "能不能",
-            "了吗",
-            r"应该.*吗",
-            r"可以.*吗",
-            r"要.*吗",
-            r"会.*吗",
-            r"能.*吗",
-        ]
+    def get_keywords(cls) -> Dict[str, float]:
+        return {
+            "是否": 1.0,
+            "能否": 1.0,
+            "要不要": 1.0,
+            "会不会": 1.0,
+            "能不能": 1.0,
+            "吗": 0.5,
+            r"应该.*吗": 1.0,
+            r"可以.*吗": 1.0,
+            r"要.*吗": 1.0,
+            r"会.*吗": 1.0,
+            r"能.*吗": 1.0,
+        }
 
 
 class SacredTriangleGroup(BaseTarotGroup):
@@ -233,17 +233,18 @@ class SacredTriangleGroup(BaseTarotGroup):
         return text
 
     @classmethod
-    def get_keywords(cls) -> List[str]:
-        return [
-            "为什么",
-            "为啥",
-            "原因",
-            "分析",
-            "状况",
-            "情况",
-            "背景",
-            "怎么",
-        ]
+    def get_keywords(cls) -> Dict[str, float]:
+        return {
+            "为什么": 0.8,
+            "为啥": 0.8,
+            "原因": 0.8,
+            "分析": 0.5,
+            "状况": 0.5,
+            "情况": 0.5,
+            "背景": 0.3,
+            "怎么": 0.8,
+            "如何": 0.8,
+        }
 
 
 class DiamondExpansionGroup(BaseTarotGroup):
@@ -280,16 +281,16 @@ class DiamondExpansionGroup(BaseTarotGroup):
         return text
 
     @classmethod
-    def get_keywords(cls) -> List[str]:
-        return [
-            "问题",
-            "困难",
-            "挑战",
-            "阻碍",
-            "麻烦",
-            "障碍",
-            "解决",
-        ]
+    def get_keywords(cls) -> Dict[str, float]:
+        return {
+            "问题": 0.4,
+            "困难": 0.8,
+            "挑战": 0.8,
+            "阻碍": 0.8,
+            "麻烦": 0.8,
+            "障碍": 0.8,
+            "解决": 0.4,
+        }
 
 
 class LoverPyramidGroup(BaseTarotGroup):
@@ -327,22 +328,22 @@ class LoverPyramidGroup(BaseTarotGroup):
         return text
 
     @classmethod
-    def get_keywords(cls) -> List[str]:
-        return [
-            "恋爱",
-            "感情",
-            "爱情",
-            "男友",
-            "女友",
-            "喜欢",
-            "暗恋",
-            "表白",
-            "恋人",
-            "他",
-            "她",
-            "鹊",
-            "533",
-        ]
+    def get_keywords(cls) -> Dict[str, float]:
+        return {
+            "恋爱": 0.9,
+            "感情": 0.9,
+            "爱情": 0.9,
+            "男友": 0.9,
+            "女友": 0.9,
+            "喜欢": 0.9,
+            "暗恋": 0.9,
+            "表白": 0.9,
+            "恋人": 0.9,
+            "他": 0.2,
+            "她": 0.2,
+            "鹊": 0.6,
+            "533": 0.6,
+        }
 
 
 class SelfExplorationGroup(BaseTarotGroup):
@@ -383,25 +384,26 @@ class SelfExplorationGroup(BaseTarotGroup):
         return text
 
     @classmethod
-    def get_keywords(cls) -> List[str]:
-        return [
-            "经历",
-            "处境",
-            "运势",
-            "自己",
-            "性格",
-            "内心",
-            "想法",
-            "心理",
-            "个性",
-            "特点",
-            "自我",
-            r"我会.*吗",
-            r"我想.*吗",
-            r"我能.*吗",
-            r"我应该.*吗",
-            r"我可以.*吗",
-        ]
+    def get_keywords(cls) -> Dict[str, float]:
+        return {
+            "经历": 0.6,
+            "处境": 0.6,
+            "运势": 0.6,
+            "自己": 0.6,
+            "性格": 0.6,
+            "内心": 0.6,
+            "想法": 0.6,
+            "心理": 0.6,
+            "个性": 0.6,
+            "特点": 0.6,
+            "自我": 0.6,
+            "什么": 0.8,
+            r"我会.*": 1.0,
+            r"我想.*": 1.0,
+            r"我能.*": 1.0,
+            r"我应该.*": 1.0,
+            r"我可以.*": 1.0,
+        }
 
 
 class GypsyCrossGroup(BaseTarotGroup):
@@ -443,22 +445,22 @@ class GypsyCrossGroup(BaseTarotGroup):
         return text
 
     @classmethod
-    def get_keywords(cls) -> List[str]:
-        return [
-            "恋爱",
-            "感情",
-            "爱情",
-            "男友",
-            "女友",
-            "喜欢",
-            "暗恋",
-            "表白",
-            "恋人",
-            "他",
-            "她",
-            "鹊",
-            "533",
-        ]
+    def get_keywords(cls) -> Dict[str, float]:
+        return {
+            "恋爱": 0.9,
+            "感情": 0.9,
+            "爱情": 0.9,
+            "男友": 0.9,
+            "女友": 0.9,
+            "喜欢": 0.9,
+            "暗恋": 0.9,
+            "表白": 0.9,
+            "恋人": 0.9,
+            "他": 0.2,
+            "她": 0.2,
+            "鹊": 0.6,
+            "533": 0.6,
+        }
 
 
 tarot_groups = [

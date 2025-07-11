@@ -1,9 +1,9 @@
 import asyncio
 import random
-from typing import Optional
+import logging
 from objects import User
+from typing import Optional
 from shuiyuan_model import ShuiyuanModel
-from constants import max_random_value
 from tarot_group_data import TarotResult, get_image_from_cache
 from tarot_model import TarotModel
 from tongyi_model import TongyiModel
@@ -154,46 +154,63 @@ class TopicModel:
         return text
 
     async def _new_post_routine(self, post_id: int) -> None:
-        # First let's try to get the post details
-        post_details = await self.model.get_post_details(post_id)
+        """
+        A routine to handle a new post in the topic.
+        NOTE: no exception should be raised in this method.
 
-        # If the member "raw" is not present, we should skip it
-        if post_details.raw is None:
-            print(f"Post {post_id} does not have raw content, skipping.")
-            return
+        :param post_id: The ID of the new post.
+        :return: None
+        """
+        # This is the text to reply to the post
+        text: Optional[str] = None
 
-        if _auto_reply_tag in post_details.raw:
-            return
+        try:
+            # First let's try to get the post details
+            post_details = await self.model.get_post_details(post_id)
 
-        # OK, check the content of the post
-        # If the help condition is met, we should not check other conditions
-        text = await self._help_condition(post_details.raw)
-        if text is not None:
-            await self.model.reply_to_post(
-                text,
-                self.topic_id,
-                post_details.post_number,
+            # If the member "raw" is not present, we should skip it
+            if post_details.raw is None:
+                logging.warning(f"Post {post_id} does not have raw content, skipping.")
+                return
+
+            # If the post is an auto-reply, we should skip it
+            if _auto_reply_tag in post_details.raw:
+                return
+
+            # OK, check the content of the post
+            # If the help condition is met, we should not check other conditions
+            text = await self._help_condition(post_details.raw)
+            if text is not None:
+                await self.model.reply_to_post(
+                    text,
+                    self.topic_id,
+                    post_details.post_number,
+                )
+                return
+
+            text = await self._533_condition(post_details.raw)
+            text = await self._tarot_condition(
+                post_details.raw,
+                user=User(
+                    post_details.user_id, post_details.username, post_details.name
+                ),
             )
-            return
-
-        text = await self._533_condition(post_details.raw)
-        if text is not None:
-            await self.model.reply_to_post(
-                text,
-                self.topic_id,
-                post_details.post_number,
+        except Exception as e:
+            # If we failed to get the post details or any other error occurred,
+            # we should log the error and reply to the post with an error message
+            logging.error(f"Failed to get post details for {post_id}: {e}")
+            text = (
+                "抱歉，南瓜bot遇到了一个错误，暂时无法处理您的请求，请稍后再试。\n\n"
+                f"<!-- {self._generate_random_string(20)} -->\n"
+                f"{_auto_reply_tag}"
             )
-
-        text = await self._tarot_condition(
-            post_details.raw,
-            user=User(post_details.user_id, post_details.username, post_details.name),
-        )
-        if text is not None:
-            await self.model.reply_to_post(
-                text,
-                self.topic_id,
-                post_details.post_number,
-            )
+        finally:
+            if text is not None:
+                await self.model.reply_to_post(
+                    text,
+                    self.topic_id,
+                    post_details.post_number,
+                )
 
     async def watch_routine(self) -> None:
         """
@@ -202,7 +219,12 @@ class TopicModel:
         """
         while True:
             # Get the topic details
-            topic_details = await self.model.get_topic_details(self.topic_id)
+            try:
+                topic_details = await self.model.get_topic_details(self.topic_id)
+            except Exception as e:
+                logging.error(f"Failed to get topic details for {self.topic_id}: {e}")
+                await asyncio.sleep(2)
+                continue
 
             # OK, let's difference the current stream with the new one
             new_stream = topic_details.post_stream.stream

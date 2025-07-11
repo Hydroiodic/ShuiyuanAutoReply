@@ -1,9 +1,10 @@
 import os
 import re
-import asyncio
-import pickle
 import aiohttp
+import asyncio
 import hashlib
+import logging
+import pickle
 import http.cookies
 from constants import *
 from dacite import from_dict
@@ -111,7 +112,7 @@ class ShuiyuanModel:
             if response.status == 200:
                 break
             elif response.status == 429:
-                print(f"Failed to reply to post: {await response.text()}")
+                logging.warning(f"Failed to reply to post: {await response.text()}")
                 await asyncio.sleep(1)
             else:
                 raise Exception(f"Failed to reply to post: {await response.text()}")
@@ -199,9 +200,9 @@ class ShuiyuanModel:
         await self.close()
 
 
-def global_ignore_illegal_cookies() -> None:
+def _global_ignore_illegal_cookies() -> None:
     # ignore the illegal key error
     http.cookies._is_legal_key = lambda _: True
 
 
-global_ignore_illegal_cookies()
+_global_ignore_illegal_cookies()

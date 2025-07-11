@@ -11,6 +11,3 @@ default_user_agent = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/114.0.0.0 Mobile Safari/537.36"
 )
-
-# Max random value
-max_random_value = 20

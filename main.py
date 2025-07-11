@@ -1,6 +1,14 @@
 import asyncio
+import logging
 from shuiyuan_model import ShuiyuanModel
 from topic_model import TopicModel
+
+# Setup the logging configuration
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 
 async def main():
