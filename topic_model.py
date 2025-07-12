@@ -188,17 +188,24 @@ class TopicModel:
                 )
                 return
 
-            text = await self._533_condition(post_details.raw)
+            # Check tarot condition
             text = await self._tarot_condition(
                 post_details.raw,
                 user=User(
-                    post_details.user_id, post_details.username, post_details.name
+                    post_details.user_id,
+                    post_details.username,
+                    post_details.name,
                 ),
             )
+
+            # If the tarot condition is not met, check the 533 condition
+            if text is None:
+                text = await self._533_condition(post_details.raw)
         except Exception as e:
-            # If we failed to get the post details or any other error occurred,
-            # we should log the error and reply to the post with an error message
+            # If we failed to get the post details or any other error occurred
             logging.error(f"Failed to get post details for {post_id}: {e}")
+            e.with_traceback()
+            # We should reply to the post with an error message
             text = (
                 "抱歉，南瓜bot遇到了一个错误，暂时无法处理您的请求，请稍后再试。\n\n"
                 f"<!-- {self._generate_random_string(20)} -->\n"

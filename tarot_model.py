@@ -85,4 +85,5 @@ class TarotModel:
         for group_class in tarot_groups:
             scores[group_class] = group_class.match_score(question)
 
-        return random.choice(max(scores.items(), key=lambda x: x[1]))
+        max_score = max(scores.values())
+        return random.choice([k for k, v in scores.items() if v == max_score])
