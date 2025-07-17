@@ -1,17 +1,17 @@
 import asyncio
-import random
 import logging
-from objects import User
 from typing import Optional
-from shuiyuan_model import ShuiyuanModel
-from tarot_group_data import TarotResult, get_image_from_cache
-from tarot_model import TarotModel
-from tongyi_model import TongyiModel
+from shuiyuan.objects import User
+from shuiyuan.shuiyuan_model import ShuiyuanModel
+from shuiyuan.topic_model import BaseTopicModel
+from tarot.tarot_group_data import TarotResult, get_image_from_cache
+from tarot.tarot_model import TarotModel
+from tarot_tongyi_model import TarotTongyiModel
 
 _auto_reply_tag = "<!-- 来自南瓜的自动回复 -->"
 
 
-class TopicModel:
+class TarotTopicModel(BaseTopicModel):
     """
     A class to represent a topic model.
     """
@@ -23,25 +23,11 @@ class TopicModel:
         :param model: An instance of ShuiyuanModel.
         :param topic_id: The ID of the topic to be managed.
         """
-        self.model = model
-        self.topic_id = topic_id
-        self.stream_list = []
-
-        self.tarot_model = TarotModel()
-        self.tongyi_model = TongyiModel()
-
-    def _generate_random_string(self, length: int) -> str:
-        """
-        Generate a random string of a given length.
-
-        :param length: The length of the random string to generate.
-        :return: A random string of the specified length.
-        """
-        return "".join(
-            random.sample(
-                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-                k=length,
-            )
+        super().__init__(model, topic_id)
+        self.tongyi_model = TarotTongyiModel()
+        self.tarot_model = TarotModel(
+            tarot_data_path="tarot/tarot_data.json",
+            tarot_img_path="tarot/tarot_img",
         )
 
     async def _upload_and_get_image_url(self, result: TarotResult) -> str:
@@ -58,7 +44,8 @@ class TopicModel:
 
         # Upload the image and get the response
         response = await self.model.upload_image(
-            "tarot_img/"
+            self.tarot_model.tarot_img_path
+            + "/"
             + str(result.index)
             + ("_rev" if result.is_reversed else "")
             + ".jpg"
@@ -124,8 +111,11 @@ class TopicModel:
             result.img_url = urls[i]
 
         # Prepend the tarot group string
+        used_username = (
+            user.name if user.name is not None and user.name != "" else user.username
+        )
         return (
-            f"你好！{user.name if user.name is not None else user.username}，"
+            f"你好！{used_username}，"
             f"欢迎来到南瓜的塔罗牌自助占卜小屋！请注意占卜结果仅供娱乐参考哦！\n\n"
             + str(tarot_group)
             + text
@@ -219,42 +209,8 @@ class TopicModel:
                     post_details.post_number,
                 )
 
-    async def watch_routine(self) -> None:
-        """
-        A routine to watch for updates on the topic.
-        This method can be extended to implement real-time updates or periodic checks.
-        """
-        while True:
-            # Get the topic details
-            try:
-                topic_details = await self.model.get_topic_details(self.topic_id)
-            except Exception as e:
-                logging.error(f"Failed to get topic details for {self.topic_id}: {e}")
-                await asyncio.sleep(2)
-                continue
-
-            # OK, let's difference the current stream with the new one
-            new_stream = topic_details.post_stream.stream
-
-            # Try to find the last element in the previous stream, which is still in the new stream
-            last_stream = None
-            for post_id in reversed(self.stream_list):
-                if post_id in new_stream:
-                    last_stream = post_id
-                    break
-
-            # If we found the last known post, we can slice the new stream
-            if last_stream is not None:
-                # Slice the new stream from the last known post
-                start_index = new_stream.index(last_stream) + 1
-                new_posts = new_stream[start_index:]
-
-                # OK, we have find the new posts, we should do some routine with them
-                routines = [self._new_post_routine(post_id) for post_id in new_posts]
-                asyncio.gather(*routines)
-
-            # Update the stream list with the new stream
-            self.stream_list = new_stream
-
-            # Sleep or wait for a condition to avoid busy waiting
-            await asyncio.sleep(2)
+    async def _daily_routine(self) -> None:
+        raise NotImplementedError(
+            "Daily routine is not implemented in TopicModel. "
+            "Please implement this method in your subclass."
+        )

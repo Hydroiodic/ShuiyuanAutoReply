@@ -1,7 +1,7 @@
 import json
 import random
 from typing import List, Type
-from tarot_group_data import *
+from .tarot_group_data import *
 
 
 class TarotModel:

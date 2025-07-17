@@ -4,6 +4,10 @@ from typing import List, Optional
 
 @dataclass
 class User:
+    """
+    Represents a user in the system.
+    """
+
     id: int
     username: str
     name: Optional[str]
@@ -11,6 +15,10 @@ class User:
 
 @dataclass
 class PostDetails:
+    """
+    Represents the details of a post in a topic.
+    """
+
     id: int
     name: Optional[str]
     user_id: int
@@ -41,12 +49,20 @@ class PostDetails:
 
 @dataclass
 class PostStream:
+    """
+    Represents a stream of posts in a topic.
+    """
+
     posts: List[PostDetails]
     stream: List[int]
 
 
 @dataclass
 class TopicDetails:
+    """
+    Represents the details of a topic.
+    """
+
     post_stream: PostStream
     id: int
     title: str
@@ -110,3 +126,14 @@ class ImageUploadResponse:
     original_filename: str
     short_url: str
     short_path: str
+
+
+@dataclass
+class TimeInADay:
+    """
+    Represents a time in a day.
+    """
+
+    hour: int
+    minute: int
+    second: int = 0

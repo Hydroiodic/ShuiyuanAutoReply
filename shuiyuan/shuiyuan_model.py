@@ -6,10 +6,10 @@ import hashlib
 import logging
 import pickle
 import http.cookies
-from constants import *
 from dacite import from_dict
 from typing import Optional
-from objects import ImageUploadResponse, PostDetails, TopicDetails
+from .constants import *
+from .objects import ImageUploadResponse, PostDetails, TopicDetails
 
 
 class CookiesFileNotFoundError(Exception):

@@ -1,4 +1,6 @@
 aiohttp
+apscheduler
 asyncio
 dacite
+dotenv
 openai
