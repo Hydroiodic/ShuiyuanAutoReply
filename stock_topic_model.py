@@ -164,7 +164,11 @@ class StockTopicModel(BaseTopicModel):
             or (not stock_code.startswith("sh") and not stock_code.startswith("sz"))
             or not stock_code[2:].isdigit()
         ):
-            return "股票代码格式错误，请使用“【A股】+股票代码”的格式，例如：【A股】sz000001。"
+            return (
+                "股票代码格式错误，请使用“【A股】+股票代码”的格式，例如：【A股】sz000001。\n"
+                f"<!-- {self._generate_random_string(20)} -->\n"
+                f"{_auto_reply_tag}"
+            )
 
         # First, let's get the min chart image for the stock
         try:
@@ -212,11 +216,6 @@ class StockTopicModel(BaseTopicModel):
         try:
             # Get the stock data from Juhe API
             stock_data = await self.juhe_model.get_stock_data(stock_code)
-
-            # Format the reply text
-            formatted_deal_pri = (
-                f"{int(float(stock_data.dapandata.traNumber)):,}".replace(",", " ")
-            )
             return (
                 f"{StockTopicModel._format_stock_model(stock_data)}\n"
                 f"{image_text}\n"
