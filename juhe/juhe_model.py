@@ -49,10 +49,16 @@ class JuheModel:
             ) as response:
                 if response.status != 200:
                     raise Exception(f"Failed to fetch data: {response.status}")
-                return from_dict(
-                    data_class=(IndexModel if type is not None else StockModel),
-                    data=(await response.json())["result"][0],
-                )
+                if type is not None:
+                    return from_dict(
+                        data_class=IndexModel,
+                        data=(await response.json())["result"],
+                    )
+                else:
+                    return from_dict(
+                        data_class=StockModel,
+                        data=(await response.json())["result"][0],
+                    )
 
     async def get_shanghai_index(self) -> IndexModel:
         """
