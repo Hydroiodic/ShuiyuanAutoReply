@@ -51,7 +51,7 @@ class JuheModel:
                     raise Exception(f"Failed to fetch data: {response.status}")
                 return from_dict(
                     data_class=(IndexModel if type is not None else StockModel),
-                    data=(await response.json())["result"],
+                    data=(await response.json())["result"][0],
                 )
 
     async def get_shanghai_index(self) -> IndexModel:

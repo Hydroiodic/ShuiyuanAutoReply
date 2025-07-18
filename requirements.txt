@@ -4,3 +4,4 @@ asyncio
 dacite
 dotenv
 openai
+pillow

@@ -27,7 +27,10 @@ async def main():
         stock_topic_model.add_time_routine(TimeInADay(hour=11, minute=30))
         stock_topic_model.add_time_routine(TimeInADay(hour=15, minute=0))
         stock_topic_model.start_scheduler()
-        await tarot_topic_model.watch_new_post_routine()
+        await asyncio.gather(
+            tarot_topic_model.watch_new_post_routine(),
+            stock_topic_model.watch_new_post_routine(),
+        )
 
 
 if __name__ == "__main__":
