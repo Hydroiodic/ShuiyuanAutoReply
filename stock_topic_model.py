@@ -2,6 +2,7 @@ import time
 import aiohttp
 import asyncio
 import logging
+import traceback
 from PIL import Image
 from typing import Optional
 from shuiyuan.shuiyuan_model import ShuiyuanModel
@@ -10,7 +11,7 @@ from juhe.juhe_model import JuheModel
 from juhe.objects import IndexModel, StockModel
 
 _auto_reply_tag = "<!-- 来自南瓜的自动回复 -->"
-_max_stock_query_per_day = 20
+_max_stock_query_per_day = 40
 
 
 class StockTopicModel(BaseTopicModel):
@@ -86,12 +87,17 @@ class StockTopicModel(BaseTopicModel):
         :param index: An instance of IndexModel.
         :return: A formatted string containing the index details.
         """
-
-        now_color = "green" if float(index.nowpri) < float(index.yesPri) else "red"
-        open_color = "green" if float(index.openPri) < float(index.yesPri) else "red"
-        high_color = "green" if float(index.highPri) < float(index.yesPri) else "red"
-        low_color = "green" if float(index.lowpri) < float(index.yesPri) else "red"
         formatted_deal_pri = f"{int(float(index.dealPri)):,}".replace(",", " ")
+
+        def _get_data_color(v: float) -> str:
+            return "green" if v < float(index.yesPri) else "red"
+
+        now_color, open_color, high_color, low_color = (
+            _get_data_color(float(index.nowpri)),
+            _get_data_color(float(index.openPri)),
+            _get_data_color(float(index.highPri)),
+            _get_data_color(float(index.lowpri)),
+        )
 
         return (
             f"**{index.name}**\n"
@@ -114,25 +120,14 @@ class StockTopicModel(BaseTopicModel):
         formatted_deal_pri = f"{int(float(stock.dapandata.traAmount)):,}万"
         formatted_deal_pri = formatted_deal_pri.replace(",", " ")
 
-        now_color = (
-            "green"
-            if float(stock.dapandata.dot) < float(stock.data.yestodEndPri)
-            else "red"
-        )
-        open_color = (
-            "green"
-            if float(stock.data.todayStartPri) < float(stock.data.yestodEndPri)
-            else "red"
-        )
-        high_color = (
-            "green"
-            if float(stock.data.todayMax) < float(stock.data.yestodEndPri)
-            else "red"
-        )
-        low_color = (
-            "green"
-            if float(stock.data.todayMin) < float(stock.data.yestodEndPri)
-            else "red"
+        def _get_data_color(v: float) -> str:
+            return "green" if v < float(stock.data.yestodEndPri) else "red"
+
+        now_color, open_color, high_color, low_color = (
+            _get_data_color(float(stock.dapandata.dot)),
+            _get_data_color(float(stock.data.todayStartPri)),
+            _get_data_color(float(stock.data.todayMax)),
+            _get_data_color(float(stock.data.todayMin)),
         )
 
         return (
@@ -175,7 +170,8 @@ class StockTopicModel(BaseTopicModel):
             image_url = await self._download_upload_and_get_image_url(stock_code)
         except Exception as e:
             logging.error(
-                f"Failed to download or upload stock image for {stock_code}: {e}"
+                f"Failed to download or upload stock image for {stock_code}, "
+                f"traceback is as follows:\n{traceback.format_exc()}"
             )
             return (
                 "抱歉，南瓜Bot遇到了一个错误，暂时无法获取股票数据，请稍后再试。\n\n"
@@ -224,7 +220,10 @@ class StockTopicModel(BaseTopicModel):
                 f"---\n[right]来自南瓜Bot自动获取数据[/right]\n"
             )
         except Exception as e:
-            logging.error(f"Failed to get stock data for {stock_code}: {e}")
+            logging.error(
+                f"Failed to get stock data for {stock_code}, "
+                f"traceback is as follows:\n{traceback.format_exc()}"
+            )
             return (
                 "南瓜Bot无法获取到股票数据，仅展示分时图。\n\n"
                 f"{image_text}\n"
@@ -263,7 +262,10 @@ class StockTopicModel(BaseTopicModel):
             text = await self._stock_condition(post_details.raw)
         except Exception as e:
             # If we failed to get the post details or any other error occurred
-            logging.error(f"Failed to get post details for {post_id}: {e}")
+            logging.error(
+                f"Failed to get post details for {post_id}, "
+                f"traceback is as follows:\n{traceback.format_exc()}"
+            )
             # We should reply to the post with an error message
             text = (
                 "抱歉，南瓜Bot遇到了一个错误，暂时无法处理您的请求，请稍后再试。\n\n"
@@ -305,7 +307,10 @@ class StockTopicModel(BaseTopicModel):
             )
         except Exception as e:
             # If we failed to get the stock data or any other error occurred
-            logging.error(f"Failed to get stock data: {e}")
+            logging.error(
+                f"Failed to get stock data, "
+                f"traceback is as follows:\n{traceback.format_exc()}"
+            )
             # We should reply to the post with an error message
             text = (
                 "抱歉，南瓜bot遇到了一个错误，暂时无法获取到大盘数据，请稍后再试。\n\n"

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import traceback
 from typing import Optional
 from shuiyuan.objects import User
 from shuiyuan.shuiyuan_model import ShuiyuanModel
@@ -193,8 +194,10 @@ class TarotTopicModel(BaseTopicModel):
                 text = await self._533_condition(post_details.raw)
         except Exception as e:
             # If we failed to get the post details or any other error occurred
-            logging.error(f"Failed to get post details for {post_id}: {e}")
-            e.with_traceback()
+            logging.error(
+                f"Failed to get post details for {post_id}, "
+                f"traceback is as follows:\n{traceback.format_exc()}"
+            )
             # We should reply to the post with an error message
             text = (
                 "抱歉，南瓜bot遇到了一个错误，暂时无法处理您的请求，请稍后再试。\n\n"
