@@ -99,16 +99,23 @@ class BaseTopicModel:
             # Sleep or wait for a condition to avoid busy waiting
             await asyncio.sleep(2)
 
-    def add_time_routine(self, activate_time: TimeInADay) -> None:
+    def add_time_routine(
+        self,
+        activate_time: TimeInADay,
+        skip_weekends: bool = False,
+    ) -> None:
         """
         A routine to perform actions at a specific time.
 
         :param activate_time: The time to activate the routine.
+        :param skip_weekends: If True, the routine will not run on weekends.
         :return: None
         """
+        day_of_week = "mon-fri" if skip_weekends else "*"
         self.scheduler.add_job(
             self._daily_routine,
             "cron",
+            day_of_week=day_of_week,
             hour=activate_time.hour,
             minute=activate_time.minute,
             second=activate_time.second,
