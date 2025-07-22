@@ -30,7 +30,7 @@ def get_image_from_cache(result: TarotResult) -> Optional[str]:
     :return: The image url of the tarot card.
     """
     key = f"{result.card.name}_{'reversed' if result.is_reversed else 'upright'}"
-    if key in _global_image_dict:
+    if key in _global_image_dict.keys():
         return _global_image_dict[key]
     else:
         # If the image is not cached, return a placeholder or an empty string
@@ -192,12 +192,15 @@ class YesOrNoGroup(BaseTarotGroup):
         return {
             "是否": 1.0,
             "能否": 1.0,
+            "是不是": 1.0,
             "要不要": 1.0,
             "会不会": 1.0,
             "能不能": 1.0,
+            "对不对": 1.0,
             "吗|嘛": 0.5,
             r"应该.*(?:吗|嘛|不)": 1.0,
             r"可以.*(?:吗|嘛|不)": 1.0,
+            r"是.*(?:吗|嘛|不)": 1.0,
             r"要.*(?:吗|嘛|不)": 1.0,
             r"会.*(?:吗|嘛|不)": 1.0,
             r"能.*(?:吗|嘛|不)": 1.0,

@@ -5,9 +5,13 @@ from typing import Optional
 from shuiyuan.objects import User
 from shuiyuan.shuiyuan_model import ShuiyuanModel
 from shuiyuan.topic_model import BaseTopicModel
-from tarot.tarot_group_data import TarotResult, get_image_from_cache
-from tarot.tarot_model import TarotModel
 from tarot_tongyi_model import TarotTongyiModel
+from tarot.tarot_model import TarotModel
+from tarot.tarot_group_data import (
+    TarotResult,
+    get_image_from_cache,
+    save_image_to_cache,
+)
 
 _auto_reply_tag = "<!-- 来自南瓜的自动回复 -->"
 
@@ -53,6 +57,7 @@ class TarotTopicModel(BaseTopicModel):
         )
 
         # Return the URL of the uploaded image
+        save_image_to_cache(result, response.short_url)
         return response.short_url
 
     async def _533_condition(self, raw: str) -> Optional[str]:
