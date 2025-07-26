@@ -26,10 +26,10 @@ class TarotTongyiModel(BaseTongyiModel):
         # Create a chat completion request with the tarot results and question
         # TODO: async API
         response = self.client.chat.completions.create(
-            model="qwen-max-2025-01-25",
-            # extra_body={
-            #     "enable_thinking": False,
-            # },
+            model="qwen3-235b-a22b",
+            extra_body={
+                "enable_thinking": False,
+            },
             messages=[
                 {
                     "role": "system",
