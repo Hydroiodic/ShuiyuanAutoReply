@@ -4,14 +4,13 @@ import asyncio
 import logging
 import traceback
 from PIL import Image
-from typing import Optional
+from typing import Optional, List
 from shuiyuan.shuiyuan_model import ShuiyuanModel
 from shuiyuan.topic_model import BaseTopicModel
-from juhe.juhe_model import JuheModel
-from juhe.objects import IndexModel, StockModel
+from ashare.ashare_model import AShareModel
+from ashare.objects import StockData
 
 _auto_reply_tag = "<!-- 来自南瓜的自动回复 -->"
-_max_stock_query_per_day = 40
 
 
 class StockTopicModel(BaseTopicModel):
@@ -27,32 +26,30 @@ class StockTopicModel(BaseTopicModel):
         :param topic_id: The ID of the topic to be managed.
         """
         super().__init__(model, topic_id)
-        self.juhe_model = JuheModel()
-        self.current_day = time.localtime().tm_mday
-        self.current_query_count = 0
+        self.ashare_model = AShareModel()
 
-    async def _download_upload_and_get_image_url(self, gid: str) -> Optional[str]:
+    async def _download_upload_and_get_image_url(self, code: str) -> Optional[str]:
         """
         Upload an stock image and return its URL.
         NOTE: we do not check if gid is valid or not.
 
-        :param gid: The ID of the stock image to be uploaded.
+        :param code: The ID of the stock image to be uploaded.
         :return: The URL of the uploaded image.
         """
         # Download the image from the URL
-        stock_min_url = f"http://image.sinajs.cn/newchart/min/n/{gid}.gif"
-        tmp_gif = f"stock_images/{gid}.gif"
-        tmp_jpg = f"stock_images/{gid}.jpg"
+        stock_min_url = f"http://image.sinajs.cn/newchart/min/n/{code}.gif"
+        tmp_gif = f"stock_images/{code}.gif"
+        tmp_jpg = f"stock_images/{code}.jpg"
         async with aiohttp.ClientSession() as session:
             async with session.get(stock_min_url) as resp:
                 # Check if the response is OK
                 if resp.status != 200:
-                    logging.warning(f"Network error for {gid}, status={resp.status}")
+                    logging.warning(f"Network error for {code}, status={resp.status}")
                     return None
                 # Read the response data and save it to a temporary file
                 data = await resp.read()
                 if not data:
-                    logging.warning(f"Stock image data for {gid} is empty.")
+                    logging.warning(f"Stock image data for {code} is empty.")
                     return None
                 with open(tmp_gif, "wb") as f:
                     f.write(data)
@@ -62,11 +59,8 @@ class StockTopicModel(BaseTopicModel):
         rgb = img.convert("RGB")
         rgb.save(tmp_jpg, "JPEG")
 
-        # Upload the image and get the response
-        response = await self.model.upload_image(tmp_jpg)
-
-        # Return the URL of the uploaded image
-        return response.short_url
+        # Upload the image and return the URL of the uploaded image
+        return (await self.model.upload_image(tmp_jpg)).short_url
 
     @staticmethod
     def _colorize_string(text: str, color: str) -> str:
@@ -80,64 +74,39 @@ class StockTopicModel(BaseTopicModel):
         return f"[color={color}]{text}[/color]"
 
     @staticmethod
-    def _format_index_model(index: IndexModel) -> str:
+    def _format_stock_data(data: List[StockData]) -> str:
         """
-        Format the IndexModel into a string.
+        Format the StockData into a string.
 
-        :param index: An instance of IndexModel.
-        :return: A formatted string containing the index details.
+        :param data: An list of StockData (length should be 2).
+        :return: A formatted string containing the data details.
         """
-        formatted_deal_pri = f"{int(float(index.dealPri)):,}".replace(",", " ")
+        # Check if the data is valid
+        if not isinstance(data, list) or len(data) != 2:
+            raise ValueError("Data must be a list of two StockData objects.")
+
+        # Format the stock volume into a readable string
+        formatted_volume = f"{int(float(data[0].volume)):,}".replace(",", " ")
 
         def _get_data_color(v: float) -> str:
-            return "green" if v < float(index.yesPri) else "red"
+            return "green" if v < float(data[1].close) else "red"
 
         now_color, open_color, high_color, low_color = (
-            _get_data_color(float(index.nowpri)),
-            _get_data_color(float(index.openPri)),
-            _get_data_color(float(index.highPri)),
-            _get_data_color(float(index.lowpri)),
+            _get_data_color(float(data[0].close)),
+            _get_data_color(float(data[0].open)),
+            _get_data_color(float(data[0].high)),
+            _get_data_color(float(data[0].low)),
         )
 
         return (
-            f"**{index.name}**\n"
-            f"当前价格：{StockTopicModel._colorize_string(index.nowpri, now_color)}\n"
-            f"涨幅：{StockTopicModel._colorize_string(f'{index.increPer}%', now_color)}\n"
-            f"开盘价：{StockTopicModel._colorize_string(index.openPri, open_color)}\n"
-            f"最高价：{StockTopicModel._colorize_string(index.highPri, high_color)}\n"
-            f"最低价：{StockTopicModel._colorize_string(index.lowpri, low_color)}\n"
-            f"成交额：{formatted_deal_pri}\n"
-        )
-
-    @staticmethod
-    def _format_stock_model(stock: StockModel) -> str:
-        """
-        Format the StockModel into a string.
-
-        :param stock: An instance of StockModel.
-        :return: A formatted string containing the stock details.
-        """
-        formatted_deal_pri = f"{int(float(stock.dapandata.traAmount)):,}万"
-        formatted_deal_pri = formatted_deal_pri.replace(",", " ")
-
-        def _get_data_color(v: float) -> str:
-            return "green" if v < float(stock.data.yestodEndPri) else "red"
-
-        now_color, open_color, high_color, low_color = (
-            _get_data_color(float(stock.dapandata.dot)),
-            _get_data_color(float(stock.data.todayStartPri)),
-            _get_data_color(float(stock.data.todayMax)),
-            _get_data_color(float(stock.data.todayMin)),
-        )
-
-        return (
-            f"**{stock.dapandata.name}**\n"
-            f"当前价格：{StockTopicModel._colorize_string(stock.dapandata.dot, now_color)}\n"
-            f"涨幅：{StockTopicModel._colorize_string(f"{stock.dapandata.rate}%", now_color)}\n"
-            f"开盘价：{StockTopicModel._colorize_string(stock.data.todayStartPri, open_color)}\n"
-            f"最高价：{StockTopicModel._colorize_string(stock.data.todayMax, high_color)}\n"
-            f"最低价：{StockTopicModel._colorize_string(stock.data.todayMin, low_color)}\n"
-            f"成交额：{formatted_deal_pri}\n"
+            f"当前价格：{StockTopicModel._colorize_string(data[0].close, now_color)}\n"
+            f"涨幅：{StockTopicModel._colorize_string(
+                f'{(data[0].close / data[1].close - 1) * 100:.2f}%', now_color
+            )}\n"
+            f"开盘价：{StockTopicModel._colorize_string(data[0].open, open_color)}\n"
+            f"最高价：{StockTopicModel._colorize_string(data[0].high, high_color)}\n"
+            f"最低价：{StockTopicModel._colorize_string(data[0].low, low_color)}\n"
+            f"成交量：{formatted_volume}\n"
         )
 
     async def _stock_condition(self, raw: str) -> Optional[str]:
@@ -191,29 +160,11 @@ class StockTopicModel(BaseTopicModel):
         # Let's arrange the text to reply
         image_text = f"[details=分时图]\n![分时图]({image_url})\n[/details]\n"
 
-        # If it's a new day, reset the query count
-        if time.localtime().tm_mday != self.current_day:
-            self.current_day = time.localtime().tm_mday
-            self.current_query_count = 0
-
-        # If we have reached the maximum query count for the day, skip this query
-        if self.current_query_count >= _max_stock_query_per_day:
-            return (
-                "南瓜Bot API今日查询次数已达上限，仅展示分时图。\n\n"
-                f"{image_text}\n"
-                f"<!-- {self._generate_random_string(20)} -->\n"
-                f"{_auto_reply_tag}\n"
-                f"---\n[right]来自南瓜Bot自动获取数据[/right]\n"
-            )
-
-        # Increment the query count
-        self.current_query_count += 1
-
         try:
-            # Get the stock data from Juhe API
-            stock_data = await self.juhe_model.get_stock_data(stock_code)
+            # Get the stock data from the AShareModel (Sina or Tencent API)
+            stock_data = await self.ashare_model.get_stock_data(stock_code)
             return (
-                f"{StockTopicModel._format_stock_model(stock_data)}\n"
+                f"{StockTopicModel._format_stock_data(stock_data)}\n"
                 f"{image_text}\n"
                 f"<!-- {self._generate_random_string(20)} -->\n"
                 f"{_auto_reply_tag}\n"
@@ -293,15 +244,17 @@ class StockTopicModel(BaseTopicModel):
         try:
             # Get the two index stock data here
             shanghai_index, shenzhen_index = await asyncio.gather(
-                self.juhe_model.get_shanghai_index(),
-                self.juhe_model.get_shenzhen_index(),
+                self.ashare_model.get_shanghai_index(),
+                self.ashare_model.get_shenzhen_index(),
             )
 
             # Let's arrange the text to reply
             text = (
                 f"**当前时间**(GMT+8)：{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}\n\n"
-                f"{StockTopicModel._format_index_model(shanghai_index)}\n"
-                f"{StockTopicModel._format_index_model(shenzhen_index)}\n\n"
+                "**上证指数**\n"
+                f"{StockTopicModel._format_stock_data(shanghai_index)}\n"
+                "**深证成指**\n"
+                f"{StockTopicModel._format_stock_data(shenzhen_index)}\n\n"
                 f"<!-- {self._generate_random_string(20)} -->\n"
                 f"---\n[right]来自南瓜Bot自动获取数据[/right]\n"
             )

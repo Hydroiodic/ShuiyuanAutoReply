@@ -4,4 +4,5 @@ asyncio
 dacite
 dotenv
 openai
+pandas
 pillow

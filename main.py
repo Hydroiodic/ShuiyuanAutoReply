@@ -1,9 +1,6 @@
 import asyncio
+import dotenv
 import logging
-from shuiyuan.objects import TimeInADay
-from shuiyuan.shuiyuan_model import ShuiyuanModel
-from tarot_topic_model import TarotTopicModel
-from stock_topic_model import StockTopicModel
 
 # Setup the logging configuration
 logging.basicConfig(
@@ -11,6 +8,15 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
+
+# Load all environment variables from the .env file
+dotenv.load_dotenv()
+
+
+from shuiyuan.objects import TimeInADay
+from shuiyuan.shuiyuan_model import ShuiyuanModel
+from tarot_topic_model import TarotTopicModel
+from stock_topic_model import StockTopicModel
 
 
 async def main():
