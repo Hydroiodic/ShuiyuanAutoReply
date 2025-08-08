@@ -1,7 +1,10 @@
 import json
 import random
+import logging
+import traceback
 from typing import List, Type
 from .tarot_group_data import *
+from .tarot_group_model import TarotGroupModel
 
 
 class TarotModel:
@@ -17,6 +20,7 @@ class TarotModel:
         self.tarot_data_path = tarot_data_path
         self.tarot_img_path = tarot_img_path
         self.tarot_data = self._load_tarot_data()
+        self.tarot_group_model = TarotGroupModel()
 
     def _load_tarot_data(self) -> None:
         """
@@ -51,7 +55,7 @@ class TarotModel:
 
         return results
 
-    def choose_tarot_group(self, question: str) -> BaseTarotGroup:
+    async def choose_tarot_group(self, question: str) -> BaseTarotGroup:
         """
         Select a group of tarot cards to answer a question.
 
@@ -59,12 +63,12 @@ class TarotModel:
         :return: An instance of a tarot group class with selected tarot results.
         """
         # choose a group
-        group = self._select_tarot_group(question)()
+        group: BaseTarotGroup = (await self._select_tarot_group(question))()
         group.set_tarot_results(self._choose_tarot_card(group.card_count))
 
         return group
 
-    def _select_tarot_group(self, question: str) -> Type[BaseTarotGroup]:
+    async def _select_tarot_group(self, question: str) -> Type[BaseTarotGroup]:
         """
         Select the most suitable tarot group based on the question.
         If the question contains the name of a tarot group, return that group.
@@ -79,6 +83,18 @@ class TarotModel:
         for group_class in tarot_groups:
             if group_class().group_name in question:
                 return group_class
+
+        # Then let's get response from qwen to help us choose a group
+        try:
+            preliminary_result = await self.tarot_group_model.get_response(question)
+            for group_class in tarot_groups:
+                if group_class().group_name in preliminary_result:
+                    return group_class
+        except Exception as e:
+            logging.error(
+                "Error while getting response from model, "
+                f"traceback is as follows:\n{traceback.format_exc()}"
+            )
 
         # OK, let's calculate the match score for each group
         scores = {}

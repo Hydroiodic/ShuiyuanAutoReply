@@ -1,7 +1,7 @@
 import re
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Type
 
 
 @dataclass
@@ -466,7 +466,7 @@ class GypsyCrossGroup(BaseTarotGroup):
         }
 
 
-tarot_groups = [
+tarot_groups: List[Type[BaseTarotGroup]] = [
     TimeTarotGroup,
     YesOrNoGroup,
     SacredTriangleGroup,

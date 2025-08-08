@@ -97,11 +97,13 @@ class TarotTopicModel(BaseTopicModel):
             return None
 
         # OK, let's generate a reply
-        tarot_group = self.tarot_model.choose_tarot_group(raw.replace("【塔罗牌】", ""))
+        tarot_group = await self.tarot_model.choose_tarot_group(
+            raw.replace("【塔罗牌】", "")
+        )
 
         # Let GPT tell us the meaning of the tarot cards
         text = '---\n\n[details="分析和建议"]\n'
-        text += self.tongyi_model.consult_tarot_card(
+        text += await self.tongyi_model.consult_tarot_card(
             raw.replace("【塔罗牌】", ""), tarot_group
         )
         text += "\n[/details]\n"

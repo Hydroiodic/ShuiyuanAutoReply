@@ -1,3 +1,4 @@
+from typing import Optional
 from tarot.tarot_group_data import BaseTarotGroup
 from tongyi.tongyi_model import BaseTongyiModel
 
@@ -10,7 +11,11 @@ class TarotTongyiModel(BaseTongyiModel):
     def __init__(self):
         super().__init__()
 
-    def consult_tarot_card(self, question: str, tarot_group: BaseTarotGroup) -> str:
+    async def consult_tarot_card(
+        self,
+        question: str,
+        tarot_group: BaseTarotGroup,
+    ) -> Optional[str]:
         """
         Consult a tarot card with a given question.
         """
@@ -24,8 +29,7 @@ class TarotTongyiModel(BaseTongyiModel):
         )
 
         # Create a chat completion request with the tarot results and question
-        # TODO: async API
-        response = self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
             model="qwen3-235b-a22b",
             extra_body={
                 "enable_thinking": False,
