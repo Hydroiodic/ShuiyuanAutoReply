@@ -1,7 +1,10 @@
+import os
+import skia
 import asyncio
 import logging
 import traceback
 from typing import Optional
+from fortune.fortune_model import FortuneModel
 from shuiyuan.objects import User
 from shuiyuan.shuiyuan_model import ShuiyuanModel
 from shuiyuan.topic_model import BaseTopicModel
@@ -30,9 +33,11 @@ class TarotTopicModel(BaseTopicModel):
         """
         super().__init__(model, topic_id)
         self.tongyi_model = TarotTongyiModel()
+
+        assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
         self.tarot_model = TarotModel(
-            tarot_data_path="tarot/tarot_data.json",
-            tarot_img_path="tarot/tarot_img",
+            tarot_data_path=os.path.join(assets_dir, "tarot_data.json"),
+            tarot_img_path=os.path.join(assets_dir, "tarot_img"),
         )
 
     async def _upload_and_get_image_url(self, result: TarotResult) -> str:
@@ -90,6 +95,7 @@ class TarotTopicModel(BaseTopicModel):
         Check if the raw content of a post contains the string "【塔罗牌】".
 
         :param raw: The raw content of the post.
+        :param user: The user who posted the content.
         :return: A string to reply to the post if the condition is met, otherwise None.
         """
         # If the raw content contains "【塔罗牌】", we reply to the post
@@ -130,6 +136,47 @@ class TarotTopicModel(BaseTopicModel):
             + _auto_reply_tag
         )
 
+    async def _fortune_condition(self, raw: str, user: User) -> Optional[str]:
+        """
+        Check if the raw content of a post contains the string "【今日运势】".
+
+        :param raw: The raw content of the post.
+        :param user: The user who posted the content.
+        :return: A string to reply to the post if the condition is met, otherwise None.
+        """
+        # If the raw content does not contain "【今日运势】", we return None
+        if "【今日运势】" not in raw:
+            return None
+
+        # OK, let's create the fortune model
+        username = (
+            user.name if user.name is not None and user.name != "" else user.username
+        )
+        fortune_model = FortuneModel(username)
+
+        # Generate an image, save it and upload it to the server
+        fortune_img = fortune_model.generate_fortune()
+        random_string = self._generate_random_string(20)
+
+        fortune_img_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "temp_images",
+            f"fortune_{random_string}.jpg",
+        )
+        fortune_img.save(fortune_img_path, skia.kJPEG)
+
+        # Upload the image and get the response
+        response = await self.model.upload_image(fortune_img_path)
+        os.remove(fortune_img_path)
+
+        # Generate the fortune text
+        text = f"{username}，你好！请收下你的今日运势：\n\n"
+        text += f"![今日运势]({response.short_url})\n\n"
+        text += f"\n\n<!-- {random_string} -->\n"
+        text += _auto_reply_tag
+
+        return text
+
     async def _help_condition(self, raw: str) -> Optional[str]:
         """
         Check if the raw content of a post contains the string "帮助".
@@ -144,8 +191,9 @@ class TarotTopicModel(BaseTopicModel):
         # OK, let's generate a reply
         text = "帮助信息如下：\n"
         text += "1. 输入【塔罗牌】+问题，可以进行塔罗牌占卜 :crystal_ball:\n"
-        text += "2. 输入533或某些变体，可以获得鹊的祝福 :bird:\n"
-        text += "3. 输入【帮助】，可以查看本帮助信息\n"
+        text += "2. 输入【今日运势】，获取你的今日运势 :dotted_six_pointed_star:\n"
+        text += "3. 输入533或某些变体，可以获得鹊的祝福 :bird:\n"
+        text += "4. 输入【帮助】，可以查看本帮助信息\n"
         text += f"<!-- {self._generate_random_string(20)} -->\n"
         text += _auto_reply_tag
 
@@ -165,6 +213,11 @@ class TarotTopicModel(BaseTopicModel):
         try:
             # First let's try to get the post details
             post_details = await self.model.get_post_details(post_id)
+            post_user = User(
+                post_details.user_id,
+                post_details.username,
+                post_details.name,
+            )
 
             # If the member "raw" is not present, we should skip it
             if post_details.raw is None:
@@ -179,21 +232,21 @@ class TarotTopicModel(BaseTopicModel):
             # If the help condition is met, we should not check other conditions
             text = await self._help_condition(post_details.raw)
             if text is not None:
-                await self.model.reply_to_post(
-                    text,
-                    self.topic_id,
-                    post_details.post_number,
-                )
+                return
+
+            # Check fortune condition
+            # If the fortune condition is met, we should not check other conditions
+            text = await self._fortune_condition(
+                post_details.raw,
+                user=post_user,
+            )
+            if text is not None:
                 return
 
             # Check tarot condition
             text = await self._tarot_condition(
                 post_details.raw,
-                user=User(
-                    post_details.user_id,
-                    post_details.username,
-                    post_details.name,
-                ),
+                user=post_user,
             )
 
             # If the tarot condition is not met, check the 533 condition

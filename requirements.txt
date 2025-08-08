@@ -6,3 +6,4 @@ dotenv
 openai
 pandas
 pillow
+skia-python

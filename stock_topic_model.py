@@ -1,3 +1,4 @@
+import os
 import time
 import aiohttp
 import asyncio
@@ -38,8 +39,9 @@ class StockTopicModel(BaseTopicModel):
         """
         # Download the image from the URL
         stock_min_url = f"http://image.sinajs.cn/newchart/min/n/{code}.gif"
-        tmp_gif = f"stock_images/{code}.gif"
-        tmp_jpg = f"stock_images/{code}.jpg"
+        temp_img_path = os.path.join(os.path.dirname(__file__), "temp_images")
+        tmp_gif = os.path.join(temp_img_path, f"{code}.gif")
+        tmp_jpg = os.path.join(temp_img_path, f"{code}.jpg")
         async with aiohttp.ClientSession() as session:
             async with session.get(stock_min_url) as resp:
                 # Check if the response is OK
@@ -60,7 +62,12 @@ class StockTopicModel(BaseTopicModel):
         rgb.save(tmp_jpg, "JPEG")
 
         # Upload the image and return the URL of the uploaded image
-        return (await self.model.upload_image(tmp_jpg)).short_url
+        response = await self.model.upload_image(tmp_jpg)
+
+        # Remove the images and return
+        os.remove(tmp_gif)
+        os.remove(tmp_jpg)
+        return response.short_url
 
     @staticmethod
     def _colorize_string(text: str, color: str) -> str:
