@@ -95,7 +95,7 @@ class BaseTarotGroup:
         # Image URL is not None, we should use "details" tag to embed the image
         return (
             f"[details={self._get_card_name(result)}]\n"
-            f"![img]({result.img_url})\n"
+            f"{result.img_url}\n"
             "[/details]"
         )
 

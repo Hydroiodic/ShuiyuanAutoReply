@@ -1,15 +1,20 @@
+import io
 import os
 import re
+import skia
+import base64
+import pickle
 import aiohttp
 import asyncio
 import hashlib
 import logging
-import pickle
+import traceback
 import http.cookies
+from PIL import Image
 from dacite import from_dict
 from typing import Optional
 from .constants import *
-from .objects import ImageUploadResponse, PostDetails, TopicDetails
+from .objects import *
 
 
 class CookiesFileNotFoundError(Exception):
@@ -173,12 +178,105 @@ class ShuiyuanModel:
                 content_type="image/jpeg",
             )
 
-            response = await self.session.post(upload_url, data=form_data)
+            response = await self.session.post(upload_url, data=form_data, timeout=10)
             if response.status != 200:
                 raise Exception(f"Failed to upload image: {await response.text()}")
 
             data = await response.json()
             return from_dict(ImageUploadResponse, data)
+
+    async def try_upload_image(
+        self,
+        image_path: str,
+        try_base64: bool = True,
+        try_base64_size_kb: int = 20,
+    ) -> ImageURL:
+        """
+        Try to upload an image and return its URL or base64 HTML code.
+
+        :param image_path: The path to the image file to upload.
+        :return: The URL of the uploaded image, or None if the upload failed.
+        """
+        try:
+            # Upload the image and get the response
+            response = await self.upload_image(image_path)
+            return ImageURL("url", f"![img]({response.short_url})")
+        except Exception as e:
+            # If try_base64 is False, we will not try to convert later
+            if not try_base64:
+                logging.error(
+                    f"Failed to upload image {image_path} to Shuiyuan server, "
+                    f"traceback is as follows:\n{traceback.format_exc()}"
+                )
+                raise e
+
+            # Log the error and traceback
+            logging.warning(
+                f"Failed to upload image {image_path} to Shuiyuan server, "
+                f"traceback is as follows:\n{traceback.format_exc()}"
+            )
+            logging.warning("Trying to convert the image to base64 HTML code.")
+
+            try:
+                with Image.open(image_path) as pil_image:
+                    base64_image = self.compress_image_to_base64(
+                        img=pil_image,
+                        target_size_kb=try_base64_size_kb,
+                    )
+                    return ImageURL(
+                        "base64",
+                        f'<img alt="img" src="data:image/jpeg;base64,{base64_image}" />',
+                    )
+            except Exception as e:
+                logging.error(
+                    f"Failed to convert image {image_path} to base64 HTML code, "
+                    f"traceback is as follows:\n{traceback.format_exc()}"
+                )
+                raise e
+
+    @staticmethod
+    def skia_to_pil(skia_image: skia.Image) -> Image.Image:
+        # Convert Skia Image to bytes
+        skia_data = skia_image.encodeToData(skia.EncodedImageFormat.kJPEG)
+        if not skia_data:
+            raise ValueError("Failed to encode Skia image to data")
+        # Convert bytes to PIL Image
+        return Image.open(io.BytesIO(bytes(skia_data)))
+
+    @staticmethod
+    def compress_image_to_base64(
+        img: Image.Image,
+        target_size_kb: int = 20,
+        quality: int = 85,
+        step: int = 5,
+    ):
+        # Ensure image is in RGB mode
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+
+        buffer = io.BytesIO()
+        current_quality = quality
+
+        while current_quality > 0:
+            buffer.seek(0)
+            buffer.truncate()
+
+            # Try to save the image with the current quality
+            img.save(buffer, format="JPEG", quality=current_quality)
+            size_kb = len(buffer.getvalue()) / 1024  # Size in KB
+
+            # Check if the size is within the target
+            if size_kb <= target_size_kb:
+                break
+
+            # Try to continue reducing quality
+            current_quality -= step
+
+        if current_quality <= 0:
+            raise ValueError("Cannot compress image to the target size")
+
+        # Convert to base64
+        return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
     async def close(self) -> None:
         """

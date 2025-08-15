@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 
 @dataclass
@@ -137,3 +137,13 @@ class TimeInADay:
     hour: int
     minute: int
     second: int = 0
+
+
+@dataclass
+class ImageURL:
+    """
+    Represents an image URL.
+    """
+
+    type: Literal["url", "base64"]
+    data: str

@@ -1,5 +1,6 @@
 import os
 import skia
+import math
 import asyncio
 import logging
 import traceback
@@ -40,11 +41,18 @@ class TarotTopicModel(BaseTopicModel):
             tarot_img_path=os.path.join(assets_dir, "tarot_img"),
         )
 
-    async def _upload_and_get_image_url(self, result: TarotResult) -> str:
+    async def _upload_and_get_tarot_image_url(
+        self,
+        result: TarotResult,
+        try_base64: bool = True,
+        try_base64_size_kb: int = 20,
+    ) -> str:
         """
         Upload an image and return its URL.
 
         :param result: The TarotResult containing the image path.
+        :param try_base64: Whether to try converting the image to base64 if upload fails.
+        :param try_base64_size_kb: The maximum size in KB for base64 conversion.
         :return: The URL of the uploaded image.
         """
         # First let's check if the image is already cached
@@ -53,17 +61,20 @@ class TarotTopicModel(BaseTopicModel):
             return url
 
         # Upload the image and get the response
-        response = await self.model.upload_image(
+        response = await self.model.try_upload_image(
             self.tarot_model.tarot_img_path
             + "/"
             + str(result.index)
             + ("_rev" if result.is_reversed else "")
-            + ".jpg"
+            + ".jpg",
+            try_base64,
+            try_base64_size_kb,
         )
 
         # Return the URL of the uploaded image
-        save_image_to_cache(result, response.short_url)
-        return response.short_url
+        if response.type == "url":
+            save_image_to_cache(result, response.data)
+        return response.data
 
     async def _533_condition(self, raw: str) -> Optional[str]:
         """
@@ -117,7 +128,12 @@ class TarotTopicModel(BaseTopicModel):
         # Load image for the tarot group
         tarot_result = tarot_group.tarot_results
         urls = await asyncio.gather(
-            *[self._upload_and_get_image_url(result) for result in tarot_result]
+            *[
+                self._upload_and_get_tarot_image_url(
+                    result, True, math.floor(40.0 / len(tarot_result))
+                )
+                for result in tarot_result
+            ]
         )
 
         # Now update the tarot results with the image URLs
@@ -166,12 +182,12 @@ class TarotTopicModel(BaseTopicModel):
         fortune_img.save(fortune_img_path, skia.kJPEG)
 
         # Upload the image and get the response
-        response = await self.model.upload_image(fortune_img_path)
+        response = await self.model.try_upload_image(fortune_img_path, True, 40)
         os.remove(fortune_img_path)
 
         # Generate the fortune text
         text = f"{username}，你好！请收下你的今日运势：\n\n"
-        text += f"![今日运势]({response.short_url})\n\n"
+        text += f"{response.data}\n\n"
         text += f"\n\n<!-- {random_string} -->\n"
         text += _auto_reply_tag
 
@@ -252,6 +268,15 @@ class TarotTopicModel(BaseTopicModel):
             # If the tarot condition is not met, check the 533 condition
             if text is None:
                 text = await self._533_condition(post_details.raw)
+
+            # Shuiyuan has a maximum length for a post (65535 characters)
+            # If our reply is too long, we should raise an error
+            if text is not None and len(text) > 65535:
+                text = (
+                    "抱歉，南瓜bot生成的回复内容过长，无法正常发送，请联系东川路笨蛋小南瓜处理。\n\n"
+                    f"<!-- {self._generate_random_string(20)} -->\n"
+                    f"{_auto_reply_tag}"
+                )
         except Exception as e:
             # If we failed to get the post details or any other error occurred
             logging.error(

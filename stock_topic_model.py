@@ -62,12 +62,12 @@ class StockTopicModel(BaseTopicModel):
         rgb.save(tmp_jpg, "JPEG")
 
         # Upload the image and return the URL of the uploaded image
-        response = await self.model.upload_image(tmp_jpg)
+        response = await self.model.try_upload_image(tmp_jpg, True, 40)
 
         # Remove the images and return
         os.remove(tmp_gif)
         os.remove(tmp_jpg)
-        return response.short_url
+        return response.data
 
     @staticmethod
     def _colorize_string(text: str, color: str) -> str:
@@ -165,7 +165,7 @@ class StockTopicModel(BaseTopicModel):
             )
 
         # Let's arrange the text to reply
-        image_text = f"[details=分时图]\n![分时图]({image_url})\n[/details]\n"
+        image_text = f"[details=分时图]\n{image_url}\n[/details]\n"
 
         try:
             # Get the stock data from the AShareModel (Sina or Tencent API)
