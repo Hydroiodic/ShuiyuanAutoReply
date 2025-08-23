@@ -6,4 +6,6 @@ dotenv
 openai
 pandas
 pillow
+pymysql
 skia-python
+sqlalchemy
