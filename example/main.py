@@ -12,12 +12,18 @@ logging.basicConfig(
 # Load all environment variables from the .env file
 dotenv.load_dotenv()
 
+# Add the parent directory to the system path for module resolution
+import os
+import sys
 
-from shuiyuan.objects import TimeInADay
-from shuiyuan.shuiyuan_model import ShuiyuanModel
-from tarot_topic_model import TarotTopicModel
-from stock_topic_model import StockTopicModel
-from dog_topic_model import DogTopicModel
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+from src.shuiyuan.objects import TimeInADay
+from src.shuiyuan.shuiyuan_model import ShuiyuanModel
+from models.tarot_topic_model import TarotTopicModel
+from models.stock_topic_model import StockTopicModel
+from models.dog_topic_model import DogTopicModel
 
 
 async def main():

@@ -6,8 +6,9 @@ import logging
 import traceback
 from datetime import datetime
 from typing import Optional
-from shuiyuan.shuiyuan_model import ShuiyuanModel
-from shuiyuan.topic_model import BaseTopicModel
+from src.constants import assets_directory
+from src.shuiyuan.shuiyuan_model import ShuiyuanModel
+from src.shuiyuan.topic_model import BaseTopicModel
 
 _auto_reply_tag = "<!-- 来自南瓜的自动回复 -->"
 
@@ -27,8 +28,7 @@ class DogTopicModel(BaseTopicModel):
         super().__init__(model, topic_id)
 
         # The path to the lzyl_data.json file
-        assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
-        self.lzyl_json_path = os.path.join(assets_dir, "lzyl_data.json")
+        self.lzyl_json_path = os.path.join(assets_directory, "lzyl_data.json")
 
         # Load the lzyl data from the JSON file
         try:

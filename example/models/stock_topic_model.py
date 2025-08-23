@@ -6,10 +6,10 @@ import logging
 import traceback
 from PIL import Image
 from typing import Optional, List
-from shuiyuan.shuiyuan_model import ShuiyuanModel
-from shuiyuan.topic_model import BaseTopicModel
-from ashare.ashare_model import AShareModel
-from ashare.objects import StockData
+from src.shuiyuan.shuiyuan_model import ShuiyuanModel
+from src.shuiyuan.topic_model import BaseTopicModel
+from src.ashare.ashare_model import AShareModel
+from src.ashare.objects import StockData
 
 _auto_reply_tag = "<!-- 来自南瓜的自动回复 -->"
 

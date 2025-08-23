@@ -5,15 +5,15 @@ import math
 import asyncio
 import logging
 import traceback
-from PIL import Image
+from .tarot_tongyi_model import TarotTongyiModel
 from typing import Optional
-from fortune.fortune_model import FortuneModel
-from shuiyuan.objects import User
-from shuiyuan.shuiyuan_model import ShuiyuanModel
-from shuiyuan.topic_model import BaseTopicModel
-from tarot_tongyi_model import TarotTongyiModel
-from tarot.tarot_model import TarotModel
-from tarot.tarot_group_data import (
+from src.constants import assets_directory
+from src.fortune.fortune_model import FortuneModel
+from src.shuiyuan.objects import User
+from src.shuiyuan.shuiyuan_model import ShuiyuanModel
+from src.shuiyuan.topic_model import BaseTopicModel
+from src.tarot.tarot_model import TarotModel
+from src.tarot.tarot_group_data import (
     TarotResult,
     get_image_from_cache,
     save_image_to_cache,
@@ -36,11 +36,9 @@ class TarotTopicModel(BaseTopicModel):
         """
         super().__init__(model, topic_id)
         self.tongyi_model = TarotTongyiModel()
-
-        assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
         self.tarot_model = TarotModel(
-            tarot_data_path=os.path.join(assets_dir, "tarot_data.json"),
-            tarot_img_path=os.path.join(assets_dir, "tarot_img"),
+            tarot_data_path=os.path.join(assets_directory, "tarot_data.json"),
+            tarot_img_path=os.path.join(assets_directory, "tarot_img"),
         )
 
     async def _upload_and_get_tarot_image_url(
