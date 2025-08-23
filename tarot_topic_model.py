@@ -1,9 +1,11 @@
+import io
 import os
 import skia
 import math
 import asyncio
 import logging
 import traceback
+from PIL import Image
 from typing import Optional
 from fortune.fortune_model import FortuneModel
 from shuiyuan.objects import User
@@ -45,7 +47,7 @@ class TarotTopicModel(BaseTopicModel):
         self,
         result: TarotResult,
         try_base64: bool = True,
-        try_base64_size_kb: int = 20,
+        try_base64_size_kb: int = 40,
     ) -> str:
         """
         Upload an image and return its URL.
@@ -60,15 +62,17 @@ class TarotTopicModel(BaseTopicModel):
         if url is not None:
             return url
 
+        # Load the image from the tarot image path
+        image_path = os.path.join(
+            self.tarot_model.tarot_img_path,
+            f"{result.index}{'_rev' if result.is_reversed else ''}.jpg",
+        )
+        with open(image_path, "rb") as f:
+            image_bytes = f.read()
+
         # Upload the image and get the response
         response = await self.model.try_upload_image(
-            self.tarot_model.tarot_img_path
-            + "/"
-            + str(result.index)
-            + ("_rev" if result.is_reversed else "")
-            + ".jpg",
-            try_base64,
-            try_base64_size_kb,
+            image_bytes, try_base64, try_base64_size_kb
         )
 
         # Return the URL of the uploaded image
@@ -170,25 +174,18 @@ class TarotTopicModel(BaseTopicModel):
         )
         fortune_model = FortuneModel(username)
 
-        # Generate an image, save it and upload it to the server
+        # Generate an image for the fortune today
+        bytes_buffer = io.BytesIO()
         fortune_img = fortune_model.generate_fortune()
-        random_string = self._generate_random_string(20)
-
-        fortune_img_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "temp_images",
-            f"fortune_{random_string}.jpg",
-        )
-        fortune_img.save(fortune_img_path, skia.kJPEG)
+        fortune_img.save(bytes_buffer, skia.EncodedImageFormat.kJPEG)
 
         # Upload the image and get the response
-        response = await self.model.try_upload_image(fortune_img_path, True, 40)
-        os.remove(fortune_img_path)
+        response = await self.model.try_upload_image(bytes_buffer.getvalue(), True)
 
         # Generate the fortune text
         text = f"{username}，你好！请收下你的今日运势：\n\n"
         text += f"{response.data}\n\n"
-        text += f"\n\n<!-- {random_string} -->\n"
+        text += f"\n\n<!-- {self._generate_random_string(20)} -->\n"
         text += _auto_reply_tag
 
         return text

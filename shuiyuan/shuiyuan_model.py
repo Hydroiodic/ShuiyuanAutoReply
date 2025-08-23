@@ -150,75 +150,70 @@ class ShuiyuanModel:
         data = await response.json()
         return from_dict(PostDetails, data)
 
-    async def upload_image(self, image_path: str) -> ImageUploadResponse:
+    async def upload_image(self, image_bytes: bytes) -> ImageUploadResponse:
         """
         Upload an image to the Shuiyuan server.
 
-        :param image_path: The path to the image file to upload.
+        :param image_bytes: The bytes of the image to upload.
         :return: The URL of the uploaded image.
         """
-        if not os.path.exists(image_path):
-            raise FileNotFoundError(f"Image file not found: {image_path}")
+        form_data = aiohttp.FormData()
+        form_data.add_field("upload_type", "composer")
+        form_data.add_field("relative_path", "null")
+        form_data.add_field("type", "image/jpeg")
+        # Calculate the SHA1 checksum of the image
+        sha1sum = hashlib.sha1(image_bytes).hexdigest()
+        form_data.add_field("sha1sum", sha1sum)
+        form_data.add_field(
+            "file",
+            image_bytes,
+            filename="image.jpg",
+            content_type="image/jpeg",
+        )
 
-        with open(image_path, "rb") as image_file:
-            # Read the image content
-            image_content = image_file.read()
+        response = await self.session.post(upload_url, data=form_data, timeout=10)
+        if response.status != 200:
+            raise Exception(f"Failed to upload image: {await response.text()}")
 
-            form_data = aiohttp.FormData()
-            form_data.add_field("upload_type", "composer")
-            form_data.add_field("relative_path", "null")
-            form_data.add_field("type", "image/jpeg")
-            # Calculate the SHA1 checksum of the image
-            sha1sum = hashlib.sha1(image_content).hexdigest()
-            form_data.add_field("sha1sum", sha1sum)
-            form_data.add_field(
-                "file",
-                image_content,
-                filename=os.path.basename(image_path),
-                content_type="image/jpeg",
-            )
-
-            response = await self.session.post(upload_url, data=form_data, timeout=10)
-            if response.status != 200:
-                raise Exception(f"Failed to upload image: {await response.text()}")
-
-            data = await response.json()
-            return from_dict(ImageUploadResponse, data)
+        data = await response.json()
+        return from_dict(ImageUploadResponse, data)
 
     async def try_upload_image(
         self,
-        image_path: str,
+        image_bytes: bytes,
         try_base64: bool = True,
-        try_base64_size_kb: int = 20,
+        try_base64_size_kb: int = 40,
     ) -> ImageURL:
         """
         Try to upload an image and return its URL or base64 HTML code.
 
-        :param image_path: The path to the image file to upload.
-        :return: The URL of the uploaded image, or None if the upload failed.
+        :param image_bytes: The bytes of the image to upload.
+        :param try_base64: Whether to try converting to base64 if upload fails.
+        :param try_base64_size_kb: The target size in KB for base64 conversion.
+        :return: An ImageURL instance containing the URL or base64 HTML code.
         """
         try:
             # Upload the image and get the response
-            response = await self.upload_image(image_path)
+            response = await self.upload_image(image_bytes)
             return ImageURL("url", f"![img]({response.short_url})")
         except Exception as e:
             # If try_base64 is False, we will not try to convert later
             if not try_base64:
                 logging.error(
-                    f"Failed to upload image {image_path} to Shuiyuan server, "
+                    f"Failed to upload image to Shuiyuan server, "
                     f"traceback is as follows:\n{traceback.format_exc()}"
                 )
                 raise e
 
             # Log the error and traceback
             logging.warning(
-                f"Failed to upload image {image_path} to Shuiyuan server, "
+                f"Failed to upload image to Shuiyuan server, "
                 f"traceback is as follows:\n{traceback.format_exc()}"
             )
             logging.warning("Trying to convert the image to base64 HTML code.")
 
             try:
-                with Image.open(image_path) as pil_image:
+                with Image.open(io.BytesIO(image_bytes)) as pil_image:
                     base64_image = self.compress_image_to_base64(
                         img=pil_image,
                         target_size_kb=try_base64_size_kb,
@@ -229,25 +224,16 @@ class ShuiyuanModel:
                     )
             except Exception as e:
                 logging.error(
-                    f"Failed to convert image {image_path} to base64 HTML code, "
+                    f"Failed to convert image to base64 HTML code, "
                     f"traceback is as follows:\n{traceback.format_exc()}"
                 )
                 raise e
 
     @staticmethod
-    def skia_to_pil(skia_image: skia.Image) -> Image.Image:
-        # Convert Skia Image to bytes
-        skia_data = skia_image.encodeToData(skia.EncodedImageFormat.kJPEG)
-        if not skia_data:
-            raise ValueError("Failed to encode Skia image to data")
-        # Convert bytes to PIL Image
-        return Image.open(io.BytesIO(bytes(skia_data)))
-
-    @staticmethod
     def compress_image_to_base64(
         img: Image.Image,
         target_size_kb: int = 20,
-        quality: int = 85,
+        quality: int = 100,
         step: int = 5,
     ):
         # Ensure image is in RGB mode

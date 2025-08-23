@@ -1,4 +1,4 @@
-import os
+import io
 import time
 import aiohttp
 import asyncio
@@ -38,10 +38,7 @@ class StockTopicModel(BaseTopicModel):
         :return: The URL of the uploaded image.
         """
         # Download the image from the URL
-        stock_min_url = f"http://image.sinajs.cn/newchart/min/n/{code}.gif"
-        temp_img_path = os.path.join(os.path.dirname(__file__), "temp_images")
-        tmp_gif = os.path.join(temp_img_path, f"{code}.gif")
-        tmp_jpg = os.path.join(temp_img_path, f"{code}.jpg")
+        stock_min_url = f"http://image.sinajs.cn/newchart/min/n/{code}.png"
         async with aiohttp.ClientSession() as session:
             async with session.get(stock_min_url) as resp:
                 # Check if the response is OK
@@ -49,24 +46,45 @@ class StockTopicModel(BaseTopicModel):
                     logging.warning(f"Network error for {code}, status={resp.status}")
                     return None
                 # Read the response data and save it to a temporary file
-                data = await resp.read()
-                if not data:
+                png_bytes = await resp.read()
+                if not png_bytes:
                     logging.warning(f"Stock image data for {code} is empty.")
                     return None
-                with open(tmp_gif, "wb") as f:
-                    f.write(data)
 
-        # Convert the GIF to JPG
-        img = Image.open(tmp_gif)
-        rgb = img.convert("RGB")
-        rgb.save(tmp_jpg, "JPEG")
+        # Try to convert the PNG to JPG
+        try:
+            # Load PNG bytes into PIL Image
+            png_image = Image.open(io.BytesIO(png_bytes))
+
+            # Convert RGBA to RGB if necessary (JPG doesn't support transparency)
+            if png_image.mode in ("RGBA", "LA", "P"):
+                # Create a white background
+                rgb_image = Image.new("RGB", png_image.size, (255, 255, 255))
+                if png_image.mode == "P":
+                    png_image = png_image.convert("RGBA")
+                rgb_image.paste(
+                    png_image,
+                    mask=(
+                        png_image.split()[-1]
+                        if png_image.mode in ("RGBA", "LA")
+                        else None
+                    ),
+                )
+                png_image = rgb_image
+            elif png_image.mode != "RGB":
+                png_image = png_image.convert("RGB")
+
+            # Save as JPG bytes
+            jpg_buffer = io.BytesIO()
+            png_image.save(jpg_buffer, format="JPEG")
+        except Exception as e:
+            logging.error(f"Failed to convert PNG to JPG for {code}: {e}")
+            return None
 
         # Upload the image and return the URL of the uploaded image
-        response = await self.model.try_upload_image(tmp_jpg, True, 40)
+        response = await self.model.try_upload_image(jpg_buffer.getvalue(), True)
 
         # Remove the images and return
-        os.remove(tmp_gif)
-        os.remove(tmp_jpg)
         return response.data
 
     @staticmethod
