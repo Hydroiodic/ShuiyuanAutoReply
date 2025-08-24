@@ -214,11 +214,13 @@ class RecordTopicModel(BaseTopicModel):
 
         # Generate the list of quotes
         text = f"以下是{raw}用户的所有语录记录：\n\n"
+        text += "[details]\n"
         for record in all_records:
             text += (
                 f"ID {record.record_id}:\n"
                 f"{RecordTopicModel._to_quote_format(record.record_str)}\n\n"
             )
+        text += "[/details]"
 
         return self._make_unique_reply(text.strip())
 
