@@ -186,11 +186,13 @@ class RecordTopicModel(BaseTopicModel):
             .lower()
         )
 
-        # If no username is provided, we return an error
-        if not raw:
+        # Split the content by whitespace and take the first part
+        split_result = raw.split()
+        if not split_result:
             return self._make_unique_reply("缺少参数，请添加用户名或别名")
 
         # Get the user_id with alias or username
+        raw = split_result[0]
         db_user = await self.db_manager.get_user_by_alias(raw)
         if not db_user:
             # Get the user from the ShuiyuanModel
@@ -541,24 +543,19 @@ class RecordTopicModel(BaseTopicModel):
                 f"traceback is as follows:\n{traceback.format_exc()}"
             )
             # We should reply to the post with an error message
-            text = (
-                "抱歉，南瓜bot遇到了一个错误，暂时无法处理您的请求，请稍后再试。\n\n"
-                f"<!-- {self._generate_random_string(20)} -->\n"
-                f"{auto_reply_tag}"
+            text = self._make_unique_reply(
+                "抱歉，南瓜bot遇到了一个错误，暂时无法处理您的请求，请稍后再试"
             )
             await self.model.reply_to_post(
                 text, self.topic_id, post_details.post_number
             )
 
     async def _daily_routine(self) -> None:
-        # Get all records from the database
-        all_records = await self.db_manager.get_all_records()
-        if not all_records:
+        # Get at most 3 random records from the database
+        random_records = await self.db_manager.get_random_records(3)
+        if not random_records:
             logging.warning("No records found in database for daily routine.")
             return
-
-        # Randomly select at most 3 quotes from the list
-        random_records = random.sample(all_records, min(3, len(all_records)))
 
         # Format the text to reply
         text = f"{datetime.now().strftime('%Y-%m-%d')} 推荐语录：\n\n"
@@ -567,7 +564,10 @@ class RecordTopicModel(BaseTopicModel):
 
         # Try to reply to the topic
         try:
-            await self.model.reply_to_post(text, self.topic_id)
+            await self.model.reply_to_post(
+                self._make_unique_reply(text.strip()),
+                self.topic_id,
+            )
         except Exception as e:
             logging.error(
                 f"Failed to reply to topic {self.topic_id}, "

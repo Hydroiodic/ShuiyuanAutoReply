@@ -290,6 +290,18 @@ class AsyncDatabaseManager:
                 logging.error(f"Error getting records: {e}")
                 return []
 
+    async def get_random_records(self, limit: int = 1) -> List[Record]:
+        """Get random records"""
+        async with self.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(Record).order_by(func.random()).limit(limit)
+                )
+                return list(result.scalars().all())
+            except Exception as e:
+                logging.error(f"Error getting random records: {e}")
+                return []
+
     async def get_records_by_user(self, user_id: int) -> List[Record]:
         """Get all records for a specific user"""
         async with self.async_session() as session:
