@@ -136,6 +136,26 @@ class ShuiyuanModel:
         data = await response.json()
         return from_dict(TopicDetails, data)
 
+    async def get_user_by_username(self, username: str) -> Optional[User]:
+        """
+        Get user details by username.
+
+        :param username: The username of the user to retrieve.
+        :return: An instance of User containing the user information.
+        """
+        response = await self.session.get(f"{get_user_url}/{username}.json")
+        if response.status == 404:
+            logging.warning(f"User '{username}' not found.")
+            return None
+        elif response.status != 200:
+            raise Exception(f"Failed to get user details: {await response.text()}")
+
+        data = await response.json()
+        user_fields = data.get("user")
+        if not user_fields:
+            return None
+        return from_dict(User, user_fields)
+
     async def get_post_details(self, post_id: int) -> PostDetails:
         """
         Get the details of a post by its ID.

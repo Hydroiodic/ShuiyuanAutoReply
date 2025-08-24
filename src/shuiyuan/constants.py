@@ -1,8 +1,9 @@
 # Some URLs used in the application
 base_url = "https://shuiyuan.sjtu.edu.cn"
+get_topic_url = f"{base_url}/t"
+get_user_url = f"{base_url}/u"
 get_cookies_url = f"{base_url}/auth/jaccount"
 reply_url = f"{base_url}/posts"
-get_topic_url = f"{base_url}/t"
 upload_url = f"{base_url}/uploads.json"
 
 # We should use a suitable User-Agent for the requests

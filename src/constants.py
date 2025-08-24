@@ -5,3 +5,5 @@ assets_directory = os.path.join(
     "..",
     "assets",
 )
+
+auto_reply_tag = "<!-- 来自南瓜的自动回复 -->"

@@ -10,8 +10,7 @@ from src.shuiyuan.shuiyuan_model import ShuiyuanModel
 from src.shuiyuan.topic_model import BaseTopicModel
 from src.ashare.ashare_model import AShareModel
 from src.ashare.objects import StockData
-
-_auto_reply_tag = "<!-- 来自南瓜的自动回复 -->"
+from src.constants import auto_reply_tag
 
 
 class StockTopicModel(BaseTopicModel):
@@ -156,7 +155,7 @@ class StockTopicModel(BaseTopicModel):
             return (
                 "股票代码格式错误，请使用“【A股】+股票代码”的格式，例如：【A股】sz000001。\n"
                 f"<!-- {self._generate_random_string(20)} -->\n"
-                f"{_auto_reply_tag}"
+                f"{auto_reply_tag}"
             )
 
         # First, let's get the min chart image for the stock
@@ -170,7 +169,7 @@ class StockTopicModel(BaseTopicModel):
             return (
                 "抱歉，南瓜Bot遇到了一个错误，暂时无法获取股票数据，请稍后再试。\n\n"
                 f"<!-- {self._generate_random_string(20)} -->\n"
-                f"{_auto_reply_tag}"
+                f"{auto_reply_tag}"
             )
 
         # If the image URL is None, which means the stock code is invalid
@@ -179,7 +178,7 @@ class StockTopicModel(BaseTopicModel):
             return (
                 "未找到该股票或无法获取到分时图，请检查股票代码是否正确。\n\n"
                 f"<!-- {self._generate_random_string(20)} -->\n"
-                f"{_auto_reply_tag}"
+                f"{auto_reply_tag}"
             )
 
         # Let's arrange the text to reply
@@ -192,7 +191,7 @@ class StockTopicModel(BaseTopicModel):
                 f"{StockTopicModel._format_stock_data(stock_data)}\n"
                 f"{image_text}\n"
                 f"<!-- {self._generate_random_string(20)} -->\n"
-                f"{_auto_reply_tag}\n"
+                f"{auto_reply_tag}\n"
                 f"---\n[right]来自南瓜Bot自动获取数据[/right]\n"
             )
         except Exception as e:
@@ -204,7 +203,7 @@ class StockTopicModel(BaseTopicModel):
                 "南瓜Bot无法获取到股票数据，仅展示分时图。\n\n"
                 f"{image_text}\n"
                 f"<!-- {self._generate_random_string(20)} -->\n"
-                f"{_auto_reply_tag}\n"
+                f"{auto_reply_tag}\n"
                 f"---\n[right]来自南瓜Bot自动获取数据[/right]\n"
             )
 
@@ -230,7 +229,7 @@ class StockTopicModel(BaseTopicModel):
                 return
 
             # If the post is an auto-reply, we should skip it
-            if _auto_reply_tag in post_details.raw:
+            if auto_reply_tag in post_details.raw:
                 return
 
             # OK, check the content of the post
@@ -246,7 +245,7 @@ class StockTopicModel(BaseTopicModel):
             text = (
                 "抱歉，南瓜Bot遇到了一个错误，暂时无法处理您的请求，请稍后再试。\n\n"
                 f"<!-- {self._generate_random_string(20)} -->\n"
-                f"{_auto_reply_tag}"
+                f"{auto_reply_tag}"
             )
         finally:
             if text is not None:

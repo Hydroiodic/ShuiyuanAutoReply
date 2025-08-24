@@ -1,4 +1,5 @@
 aiohttp
+aiomysql
 apscheduler
 asyncio
 dacite

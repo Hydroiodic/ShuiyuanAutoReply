@@ -7,7 +7,7 @@ import logging
 import traceback
 from .tarot_tongyi_model import TarotTongyiModel
 from typing import Optional
-from src.constants import assets_directory
+from src.constants import assets_directory, auto_reply_tag
 from src.fortune.fortune_model import FortuneModel
 from src.shuiyuan.objects import User
 from src.shuiyuan.shuiyuan_model import ShuiyuanModel
@@ -18,8 +18,6 @@ from src.tarot.tarot_group_data import (
     get_image_from_cache,
     save_image_to_cache,
 )
-
-_auto_reply_tag = "<!-- 来自南瓜的自动回复 -->"
 
 
 class TarotTopicModel(BaseTopicModel):
@@ -95,7 +93,7 @@ class TarotTopicModel(BaseTopicModel):
         # Generate a unique reply text
         text = "鹊\n\n---\n[right]这是一条自动回复[/right]\n"
         text += f"<!-- {self._generate_random_string(20)} -->\n"
-        text += _auto_reply_tag
+        text += auto_reply_tag
 
         # If the raw content contains "533", we return the text
         if "我要谈恋爱" in raw or "533" in raw:
@@ -151,7 +149,7 @@ class TarotTopicModel(BaseTopicModel):
             f"欢迎来到南瓜的塔罗牌自助占卜小屋！请注意占卜结果仅供娱乐参考哦！\n\n"
             + str(tarot_group)
             + text
-            + _auto_reply_tag
+            + auto_reply_tag
         )
 
     async def _fortune_condition(self, raw: str, user: User) -> Optional[str]:
@@ -184,7 +182,7 @@ class TarotTopicModel(BaseTopicModel):
         text = f"{username}，你好！请收下你的今日运势：\n\n"
         text += f"{response.data}\n\n"
         text += f"\n\n<!-- {self._generate_random_string(20)} -->\n"
-        text += _auto_reply_tag
+        text += auto_reply_tag
 
         return text
 
@@ -206,7 +204,7 @@ class TarotTopicModel(BaseTopicModel):
         text += "3. 输入533或某些变体，可以获得鹊的祝福 :bird:\n"
         text += "4. 输入【帮助】，可以查看本帮助信息\n"
         text += f"<!-- {self._generate_random_string(20)} -->\n"
-        text += _auto_reply_tag
+        text += auto_reply_tag
 
         return text
 
@@ -236,7 +234,7 @@ class TarotTopicModel(BaseTopicModel):
                 return
 
             # If the post is an auto-reply, we should skip it
-            if _auto_reply_tag in post_details.raw:
+            if auto_reply_tag in post_details.raw:
                 return
 
             # OK, check the content of the post
@@ -270,8 +268,10 @@ class TarotTopicModel(BaseTopicModel):
                 text = (
                     "抱歉，南瓜bot生成的回复内容过长，无法正常发送，请联系东川路笨蛋小南瓜处理。\n\n"
                     f"<!-- {self._generate_random_string(20)} -->\n"
-                    f"{_auto_reply_tag}"
+                    f"{auto_reply_tag}"
                 )
+                return
+
         except Exception as e:
             # If we failed to get the post details or any other error occurred
             logging.error(
@@ -282,7 +282,7 @@ class TarotTopicModel(BaseTopicModel):
             text = (
                 "抱歉，南瓜bot遇到了一个错误，暂时无法处理您的请求，请稍后再试。\n\n"
                 f"<!-- {self._generate_random_string(20)} -->\n"
-                f"{_auto_reply_tag}"
+                f"{auto_reply_tag}"
             )
         finally:
             if text is not None:
