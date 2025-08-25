@@ -155,7 +155,7 @@ class RecordTopicModel(BaseTopicModel):
             return self._make_unique_reply(f"找不到ID为{record_id}的语录")
 
         # Check if the current user has permission to delete this record
-        if record.user.user_id != user.user_id and record.user.allow_others != 1:
+        if record.user.user_id != user.id and record.user.allow_others != 1:
             return self._make_unique_reply("您没有权限删除此语录")
 
         # Remove the record from the database

@@ -36,7 +36,7 @@ async def main():
         # Let's try to get the post streams
         tarot_topic_model = TarotTopicModel(model, 388001)
         stock_topic_model = StockTopicModel(model, 392286)
-        record_topic_model = RecordTopicModel(model, 406862)
+        record_topic_model = RecordTopicModel(model, 408444)
 
         stock_topic_model.add_time_routine(TimeInADay(hour=9, minute=30), True)
         stock_topic_model.add_time_routine(TimeInADay(hour=11, minute=30), True)
