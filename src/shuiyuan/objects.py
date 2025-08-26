@@ -79,7 +79,7 @@ class TopicDetails:
     has_summary: bool
     archetype: str
     slug: str
-    category_id: int
+    category_id: Optional[int]
     word_count: int
     deleted_at: Optional[str]
     user_id: int

@@ -1,7 +1,6 @@
 import io
 import os
 import re
-import skia
 import base64
 import pickle
 import aiohttp
