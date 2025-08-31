@@ -1,10 +1,12 @@
 import asyncio
 import random
 import logging
+import traceback
 from abc import abstractmethod
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from .objects import TimeInADay
 from .shuiyuan_model import ShuiyuanModel
+from ..constants import auto_reply_tag
 
 
 class BaseTopicModel:
@@ -24,7 +26,8 @@ class BaseTopicModel:
         self.stream_list = []
         self.scheduler = AsyncIOScheduler()
 
-    def _generate_random_string(self, length: int) -> str:
+    @staticmethod
+    def _generate_random_string(length: int) -> str:
         """
         Generate a random string of a given length.
 
@@ -36,6 +39,20 @@ class BaseTopicModel:
                 "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
                 k=length,
             )
+        )
+
+    @staticmethod
+    def _make_unique_reply(base: str) -> str:
+        """
+        Append a random string to the base reply to make it unique.
+
+        :param base: The base reply string.
+        :return: The unique reply string.
+        """
+        return (
+            f"{base}\n\n"
+            f"<!-- {BaseTopicModel._generate_random_string(20)} -->\n"
+            f"{auto_reply_tag}"
         )
 
     @abstractmethod
@@ -68,9 +85,12 @@ class BaseTopicModel:
             # Get the topic details
             try:
                 topic_details = await self.model.get_topic_details(self.topic_id)
-            except Exception as e:
-                logging.error(f"Failed to get topic details for {self.topic_id}: {e}")
-                await asyncio.sleep(2)
+            except Exception:
+                logging.error(
+                    f"Failed to get topic details for {self.topic_id}, "
+                    f"traceback is as follows:\n{traceback.format_exc()}"
+                )
+                await asyncio.sleep(5)
                 continue
 
             # OK, let's difference the current stream with the new one
@@ -97,7 +117,7 @@ class BaseTopicModel:
             self.stream_list = new_stream
 
             # Sleep or wait for a condition to avoid busy waiting
-            await asyncio.sleep(2)
+            await asyncio.sleep(5)
 
     def add_time_routine(
         self,

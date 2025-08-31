@@ -24,11 +24,11 @@ from src.database.manager import global_async_db_manager
 async def init_database():
     """Initialize the database"""
     try:
-        print("Creating database tables...")
+        logging.info("Creating database tables...")
         await global_async_db_manager.create_tables()
-        print("Database initialized successfully!")
+        logging.info("Database initialized successfully!")
     except Exception as e:
-        print(f"Error initializing database: {e}")
+        logging.error(f"Error initializing database: {e}")
         raise
 
 

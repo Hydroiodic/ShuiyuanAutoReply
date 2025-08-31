@@ -76,8 +76,11 @@ class StockTopicModel(BaseTopicModel):
             # Save as JPG bytes
             jpg_buffer = io.BytesIO()
             png_image.save(jpg_buffer, format="JPEG")
-        except Exception as e:
-            logging.error(f"Failed to convert PNG to JPG for {code}: {e}")
+        except Exception:
+            logging.error(
+                f"Failed to convert PNG to JPG for {code}, "
+                f"traceback is as follows:\n{traceback.format_exc()}"
+            )
             return None
 
         # Upload the image and return the URL of the uploaded image
@@ -152,33 +155,27 @@ class StockTopicModel(BaseTopicModel):
             or (not stock_code.startswith("sh") and not stock_code.startswith("sz"))
             or not stock_code[2:].isdigit()
         ):
-            return (
-                "股票代码格式错误，请使用“【A股】+股票代码”的格式，例如：【A股】sz000001。\n"
-                f"<!-- {self._generate_random_string(20)} -->\n"
-                f"{auto_reply_tag}"
+            return BaseTopicModel._make_unique_reply(
+                "股票代码格式错误，请使用“【A股】+股票代码”的格式，例如：【A股】sz000001。"
             )
 
         # First, let's get the min chart image for the stock
         try:
             image_url = await self._download_upload_and_get_image_url(stock_code)
-        except Exception as e:
+        except Exception:
             logging.error(
                 f"Failed to download or upload stock image for {stock_code}, "
                 f"traceback is as follows:\n{traceback.format_exc()}"
             )
-            return (
-                "抱歉，南瓜Bot遇到了一个错误，暂时无法获取股票数据，请稍后再试。\n\n"
-                f"<!-- {self._generate_random_string(20)} -->\n"
-                f"{auto_reply_tag}"
+            return BaseTopicModel._make_unique_reply(
+                "抱歉，南瓜Bot遇到了一个错误，暂时无法获取股票数据，请稍后再试"
             )
 
         # If the image URL is None, which means the stock code is invalid
         # or the image could not be downloaded, we should return an error message
         if image_url is None:
-            return (
+            return BaseTopicModel._make_unique_reply(
                 "未找到该股票或无法获取到分时图，请检查股票代码是否正确。\n\n"
-                f"<!-- {self._generate_random_string(20)} -->\n"
-                f"{auto_reply_tag}"
             )
 
         # Let's arrange the text to reply
@@ -187,23 +184,19 @@ class StockTopicModel(BaseTopicModel):
         try:
             # Get the stock data from the AShareModel (Sina or Tencent API)
             stock_data = await self.ashare_model.get_stock_data(stock_code)
-            return (
+            return BaseTopicModel._make_unique_reply(
                 f"{StockTopicModel._format_stock_data(stock_data)}\n"
-                f"{image_text}\n"
-                f"<!-- {self._generate_random_string(20)} -->\n"
-                f"{auto_reply_tag}\n"
-                f"---\n[right]来自南瓜Bot自动获取数据[/right]\n"
+                f"{image_text}\n\n"
+                f"---\n[right]来自南瓜Bot自动获取数据[/right]"
             )
-        except Exception as e:
+        except Exception:
             logging.error(
                 f"Failed to get stock data for {stock_code}, "
                 f"traceback is as follows:\n{traceback.format_exc()}"
             )
-            return (
+            return BaseTopicModel._make_unique_reply(
                 "南瓜Bot无法获取到股票数据，仅展示分时图。\n\n"
-                f"{image_text}\n"
-                f"<!-- {self._generate_random_string(20)} -->\n"
-                f"{auto_reply_tag}\n"
+                f"{image_text}\n\n"
                 f"---\n[right]来自南瓜Bot自动获取数据[/right]\n"
             )
 
@@ -222,12 +215,18 @@ class StockTopicModel(BaseTopicModel):
         try:
             # First let's try to get the post details
             post_details = await self.model.get_post_details(post_id)
-
             # If the member "raw" is not present, we should skip it
             if post_details.raw is None:
                 logging.warning(f"Post {post_id} does not have raw content, skipping.")
                 return
+        except Exception:
+            logging.error(
+                f"Failed to get post details for {post_id}, "
+                f"traceback is as follows:\n{traceback.format_exc()}"
+            )
+            return
 
+        try:
             # If the post is an auto-reply, we should skip it
             if auto_reply_tag in post_details.raw:
                 return
@@ -235,17 +234,15 @@ class StockTopicModel(BaseTopicModel):
             # OK, check the content of the post
             # If the post contains "A股", we will reply with the stock data
             text = await self._stock_condition(post_details.raw)
-        except Exception as e:
+        except Exception:
             # If we failed to get the post details or any other error occurred
             logging.error(
-                f"Failed to get post details for {post_id}, "
+                f"Failed to process post {post_id}, "
                 f"traceback is as follows:\n{traceback.format_exc()}"
             )
             # We should reply to the post with an error message
-            text = (
-                "抱歉，南瓜Bot遇到了一个错误，暂时无法处理您的请求，请稍后再试。\n\n"
-                f"<!-- {self._generate_random_string(20)} -->\n"
-                f"{auto_reply_tag}"
+            text = BaseTopicModel._make_unique_reply(
+                "抱歉，南瓜Bot遇到了一个错误，暂时无法处理您的请求，请稍后再试"
             )
         finally:
             if text is not None:
@@ -273,25 +270,23 @@ class StockTopicModel(BaseTopicModel):
             )
 
             # Let's arrange the text to reply
-            text = (
+            text = BaseTopicModel._make_unique_reply(
                 f"**当前时间**(GMT+8)：{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}\n\n"
                 "**上证指数**\n"
                 f"{StockTopicModel._format_stock_data(shanghai_index)}\n"
                 "**深证成指**\n"
                 f"{StockTopicModel._format_stock_data(shenzhen_index)}\n\n"
-                f"<!-- {self._generate_random_string(20)} -->\n"
-                f"---\n[right]来自南瓜Bot自动获取数据[/right]\n"
+                f"---\n[right]来自南瓜Bot自动获取数据[/right]"
             )
-        except Exception as e:
+        except Exception:
             # If we failed to get the stock data or any other error occurred
             logging.error(
                 f"Failed to get stock data, "
                 f"traceback is as follows:\n{traceback.format_exc()}"
             )
             # We should reply to the post with an error message
-            text = (
-                "抱歉，南瓜bot遇到了一个错误，暂时无法获取到大盘数据，请稍后再试。\n\n"
-                f"<!-- {self._generate_random_string(20)} -->\n"
+            text = BaseTopicModel._make_unique_reply(
+                "抱歉，南瓜bot遇到了一个错误，暂时无法获取到大盘数据，请稍后再试"
             )
         finally:
             if text is not None:

@@ -90,14 +90,11 @@ class TarotTopicModel(BaseTopicModel):
         raw = raw.replace("伍", "5").replace("叁", "3")
         raw = raw.replace("⑤", "5").replace("③", "3")
 
-        # Generate a unique reply text
-        text = "鹊\n\n---\n[right]这是一条自动回复[/right]\n"
-        text += f"<!-- {self._generate_random_string(20)} -->\n"
-        text += auto_reply_tag
-
         # If the raw content contains "533", we return the text
         if "我要谈恋爱" in raw or "533" in raw:
-            return text
+            return BaseTopicModel._make_unique_reply(
+                "鹊\n\n---\n[right]这是一条自动回复[/right]"
+            )
 
         return None
 
@@ -144,12 +141,11 @@ class TarotTopicModel(BaseTopicModel):
         used_username = (
             user.name if user.name is not None and user.name != "" else user.username
         )
-        return (
+        return BaseTopicModel._make_unique_reply(
             f"你好！{used_username}，"
             f"欢迎来到南瓜的塔罗牌自助占卜小屋！请注意占卜结果仅供娱乐参考哦！\n\n"
-            + str(tarot_group)
-            + text
-            + auto_reply_tag
+            f"{str(tarot_group)}"
+            f"{text}"
         )
 
     async def _fortune_condition(self, raw: str, user: User) -> Optional[str]:
@@ -178,13 +174,10 @@ class TarotTopicModel(BaseTopicModel):
         # Upload the image and get the response
         response = await self.model.try_upload_image(bytes_buffer.getvalue(), True)
 
-        # Generate the fortune text
-        text = f"{username}，你好！请收下你的今日运势：\n\n"
-        text += f"{response.data}\n\n"
-        text += f"\n\n<!-- {self._generate_random_string(20)} -->\n"
-        text += auto_reply_tag
-
-        return text
+        # Return the fortune text
+        return BaseTopicModel._make_unique_reply(
+            f"{username}，你好！请收下你的今日运势：\n\n{response.data}"
+        )
 
     async def _help_condition(self, raw: str) -> Optional[str]:
         """
@@ -198,15 +191,13 @@ class TarotTopicModel(BaseTopicModel):
             return None
 
         # OK, let's generate a reply
-        text = "帮助信息如下：\n"
-        text += "1. 输入【塔罗牌】+问题，可以进行塔罗牌占卜 :crystal_ball:\n"
-        text += "2. 输入【今日运势】，获取你的今日运势 :dotted_six_pointed_star:\n"
-        text += "3. 输入533或某些变体，可以获得鹊的祝福 :bird:\n"
-        text += "4. 输入【帮助】，可以查看本帮助信息\n"
-        text += f"<!-- {self._generate_random_string(20)} -->\n"
-        text += auto_reply_tag
-
-        return text
+        return BaseTopicModel._make_unique_reply(
+            "帮助信息如下：\n"
+            "1. 输入【塔罗牌】+问题，可以进行塔罗牌占卜 :crystal_ball:\n"
+            "2. 输入【今日运势】，获取你的今日运势 :dotted_six_pointed_star:\n"
+            "3. 输入533或某些变体，可以获得鹊的祝福 :bird:\n"
+            "4. 输入【帮助】，可以查看本帮助信息"
+        )
 
     async def _new_post_routine(self, post_id: int) -> None:
         """
@@ -265,25 +256,22 @@ class TarotTopicModel(BaseTopicModel):
             # Shuiyuan has a maximum length for a post (65535 characters)
             # If our reply is too long, we should raise an error
             if text is not None and len(text) > 65535:
-                text = (
-                    "抱歉，南瓜bot生成的回复内容过长，无法正常发送，请联系东川路笨蛋小南瓜处理。\n\n"
-                    f"<!-- {self._generate_random_string(20)} -->\n"
-                    f"{auto_reply_tag}"
+                text = BaseTopicModel._make_unique_reply(
+                    "抱歉，南瓜bot生成的回复内容过长，无法正常发送，请联系东川路笨蛋小南瓜处理"
                 )
                 return
 
-        except Exception as e:
+        except Exception:
             # If we failed to get the post details or any other error occurred
             logging.error(
                 f"Failed to get post details for {post_id}, "
                 f"traceback is as follows:\n{traceback.format_exc()}"
             )
             # We should reply to the post with an error message
-            text = (
-                "抱歉，南瓜bot遇到了一个错误，暂时无法处理您的请求，请稍后再试。\n\n"
-                f"<!-- {self._generate_random_string(20)} -->\n"
-                f"{auto_reply_tag}"
+            text = BaseTopicModel._make_unique_reply(
+                "抱歉，南瓜bot遇到了一个错误，暂时无法处理您的请求，请稍后再试"
             )
+
         finally:
             if text is not None:
                 await self.model.reply_to_post(

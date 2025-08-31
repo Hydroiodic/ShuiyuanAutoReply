@@ -90,7 +90,7 @@ class TarotModel:
             for group_class in tarot_groups:
                 if group_class().group_name in preliminary_result:
                     return group_class
-        except Exception as e:
+        except Exception:
             logging.error(
                 "Error while getting response from model, "
                 f"traceback is as follows:\n{traceback.format_exc()}"
