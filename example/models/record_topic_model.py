@@ -60,11 +60,9 @@ class RecordTopicModel(BaseTopicModel):
             return None
 
         # Remove the keyword itself
-        raw = (
-            RecordTopicModel._remove_shuiyuan_signature(raw.replace("【记录语录】", ""))
-            .strip()
-            .lower()
-        )
+        raw = RecordTopicModel._remove_shuiyuan_signature(
+            raw.replace("【记录语录】", "")
+        ).strip()
 
         # Get the first line as username/alias, and the rest as the record
         split_result = raw.split("\n", 1)
@@ -73,7 +71,7 @@ class RecordTopicModel(BaseTopicModel):
                 "格式错误，请使用：【记录语录】+用户名（需在同一行）+语录内容（需换行）"
             )
 
-        raw_username = split_result[0].strip()
+        raw_username = split_result[0].strip().lower()
         raw = split_result[1].strip()
         if not raw:
             return BaseTopicModel._make_unique_reply("语录内容不能为空")
