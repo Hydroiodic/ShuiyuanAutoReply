@@ -10,6 +10,7 @@ from sqlalchemy import (
     Column,
     Integer,
     String,
+    Text,
     DateTime,
     ForeignKey,
     select,
@@ -50,7 +51,7 @@ class Record(Base):
 
     # The class Record has columns: record_id, record_str, and user_id (foreign key).
     record_id = Column(Integer, primary_key=True, autoincrement=True)
-    record_str = Column(String(255), nullable=False)
+    record_str = Column(Text, nullable=False)
     user_id = Column(Integer, ForeignKey("user.user_id"), nullable=False)
 
     # Define relationship with User (many-to-one)
@@ -67,7 +68,7 @@ class Alias(Base):
 
     # The class Alias has columns: alias_id, alias_str, and user_id (foreign key).
     alias_id = Column(Integer, primary_key=True, autoincrement=True)
-    alias_str = Column(String(100), nullable=False, unique=True)
+    alias_str = Column(String(255), nullable=False, unique=True)
     user_id = Column(Integer, ForeignKey("user.user_id"), nullable=False)
 
     # Define relationship with User (many-to-one)
