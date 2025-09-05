@@ -1,5 +1,4 @@
 import re
-import random
 import logging
 import traceback
 from typing import Optional
@@ -204,7 +203,7 @@ class RecordTopicModel(BaseTopicModel):
             return BaseTopicModel._make_unique_reply("该用户当前没有语录记录")
 
         # Generate the list of quotes
-        text = f"以下是{raw}用户的所有语录记录：\n\n"
+        text = f"以下是 '{raw}' 用户的所有语录记录：\n\n"
         text += "[details]\n"
         for record in all_records:
             text += (
