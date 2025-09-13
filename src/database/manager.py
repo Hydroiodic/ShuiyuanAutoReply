@@ -1,7 +1,8 @@
 import os
+import asyncio
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import Callable, List, Optional
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import relationship, selectinload
@@ -88,6 +89,25 @@ class AsyncDatabaseManager:
             self.engine, class_=AsyncSession, expire_on_commit=False
         )
 
+    @staticmethod
+    async def _execute_with_retry(
+        coro: Callable,
+        retries: int = 3,
+        delay: float = 1.0,
+    ):
+        """Execute a coroutine with retries on failure"""
+        for attempt in range(retries):
+            try:
+                return await coro()
+            except Exception as e:
+                logging.warning(f"Attempt {attempt + 1} failed: {e}")
+                if attempt < retries - 1:
+                    await asyncio.sleep(delay)
+
+        # If all attempts fail, raise the last exception
+        logging.error("All retry attempts failed")
+        raise Exception("All retry attempts failed")
+
     async def create_tables(self):
         """Create all tables"""
         async with self.engine.begin() as conn:
@@ -101,7 +121,7 @@ class AsyncDatabaseManager:
         logging.info("Tables dropped successfully")
 
     # CRUD operations for User table
-    async def add_user(self, user_id: int) -> Optional[User]:
+    async def _add_user(self, user_id: int) -> Optional[User]:
         """Add a new user"""
         async with self.async_session() as session:
             try:
@@ -124,10 +144,19 @@ class AsyncDatabaseManager:
 
             except Exception as e:
                 await session.rollback()
-                logging.error(f"Error adding user: {e}")
-                return None
+                raise e
 
-    async def get_user(self, user_id: int) -> Optional[User]:
+    async def add_user(self, user_id: int) -> Optional[User]:
+        """Add a new user with retries"""
+        try:
+            return await AsyncDatabaseManager._execute_with_retry(
+                lambda: self._add_user(user_id)
+            )
+        except Exception as e:
+            logging.error(f"Failed to add user after retries: {e}")
+            return None
+
+    async def _get_user(self, user_id: int) -> Optional[User]:
         """Get user by ID"""
         async with self.async_session() as session:
             try:
@@ -136,10 +165,19 @@ class AsyncDatabaseManager:
                 )
                 return result.scalar_one_or_none()
             except Exception as e:
-                logging.error(f"Error getting user: {e}")
-                return None
+                raise e
 
-    async def get_or_add_user(self, user_id: int) -> Optional[User]:
+    async def get_user(self, user_id: int) -> Optional[User]:
+        """Get user by ID with retries"""
+        try:
+            return await AsyncDatabaseManager._execute_with_retry(
+                lambda: self._get_user(user_id)
+            )
+        except Exception as e:
+            logging.error(f"Failed to get user after retries: {e}")
+            return None
+
+    async def _get_or_add_user(self, user_id: int) -> Optional[User]:
         """Get user by ID, create if not exists"""
         async with self.async_session() as session:
             try:
@@ -161,10 +199,19 @@ class AsyncDatabaseManager:
 
             except Exception as e:
                 await session.rollback()
-                logging.error(f"Error getting or adding user: {e}")
-                return None
+                raise e
 
-    async def update_user(
+    async def get_or_add_user(self, user_id: int) -> Optional[User]:
+        """Get user by ID, create if not exists, with retries"""
+        try:
+            return await AsyncDatabaseManager._execute_with_retry(
+                lambda: self._get_or_add_user(user_id)
+            )
+        except Exception as e:
+            logging.error(f"Failed to get or add user after retries: {e}")
+            return None
+
+    async def _update_user(
         self,
         user_id: int,
         coin: Optional[int] = None,
@@ -198,10 +245,25 @@ class AsyncDatabaseManager:
 
             except Exception as e:
                 await session.rollback()
-                logging.error(f"Error updating user: {e}")
-                return False
+                raise e
 
-    async def delete_user(self, user_id: int) -> bool:
+    async def update_user(
+        self,
+        user_id: int,
+        coin: Optional[int] = None,
+        enable_record: Optional[int] = None,
+        allow_others: Optional[int] = None,
+    ) -> bool:
+        """Update user information with retries"""
+        try:
+            return await AsyncDatabaseManager._execute_with_retry(
+                lambda: self._update_user(user_id, coin, enable_record, allow_others)
+            )
+        except Exception as e:
+            logging.error(f"Failed to update user after retries: {e}")
+            return False
+
+    async def _delete_user(self, user_id: int) -> bool:
         """Delete a user and all associated records (cascade delete is configured)"""
         async with self.async_session() as session:
             try:
@@ -222,21 +284,37 @@ class AsyncDatabaseManager:
 
             except Exception as e:
                 await session.rollback()
-                logging.error(f"Error deleting user: {e}")
-                return False
+                raise e
 
-    async def get_all_users(self) -> List[User]:
+    async def delete_user(self, user_id: int) -> bool:
+        """Delete a user and all associated records with retries"""
+        try:
+            return await AsyncDatabaseManager._execute_with_retry(
+                lambda: self._delete_user(user_id)
+            )
+        except Exception as e:
+            logging.error(f"Failed to delete user after retries: {e}")
+            return False
+
+    async def _get_all_users(self) -> List[User]:
         """Get all users"""
         async with self.async_session() as session:
             try:
                 result = await session.execute(select(User))
                 return list(result.scalars().all())
             except Exception as e:
-                logging.error(f"Error getting users: {e}")
-                return []
+                raise e
+
+    async def get_all_users(self) -> List[User]:
+        """Get all users with retries"""
+        try:
+            return await AsyncDatabaseManager._execute_with_retry(self._get_all_users)
+        except Exception as e:
+            logging.error(f"Failed to get all users after retries: {e}")
+            return []
 
     # Operations for Record table
-    async def add_record(self, user_id: int, record_str: str) -> Optional[Record]:
+    async def _add_record(self, user_id: int, record_str: str) -> Optional[Record]:
         """Add a record, create user if it doesn't exist"""
         async with self.async_session() as session:
             try:
@@ -264,10 +342,19 @@ class AsyncDatabaseManager:
 
             except Exception as e:
                 await session.rollback()
-                logging.error(f"Error adding record: {e}")
-                return None
+                raise e
 
-    async def get_record(self, record_id: int) -> Optional[Record]:
+    async def add_record(self, user_id: int, record_str: str) -> Optional[Record]:
+        """Add a record, create user if it doesn't exist, with retries"""
+        try:
+            return await AsyncDatabaseManager._execute_with_retry(
+                lambda: self._add_record(user_id, record_str)
+            )
+        except Exception as e:
+            logging.error(f"Failed to add record after retries: {e}")
+            return None
+
+    async def _get_record(self, record_id: int) -> Optional[Record]:
         """Get record by ID with user relationship loaded"""
         async with self.async_session() as session:
             try:
@@ -278,20 +365,36 @@ class AsyncDatabaseManager:
                 )
                 return result.scalar_one_or_none()
             except Exception as e:
-                logging.error(f"Error getting record: {e}")
-                return None
+                raise e
 
-    async def get_all_records(self) -> List[Record]:
+    async def get_record(self, record_id: int) -> Optional[Record]:
+        """Get record by ID with retries"""
+        try:
+            return await AsyncDatabaseManager._execute_with_retry(
+                lambda: self._get_record(record_id)
+            )
+        except Exception as e:
+            logging.error(f"Failed to get record after retries: {e}")
+            return None
+
+    async def _get_all_records(self) -> List[Record]:
         """Get all records"""
         async with self.async_session() as session:
             try:
                 result = await session.execute(select(Record))
                 return list(result.scalars().all())
             except Exception as e:
-                logging.error(f"Error getting records: {e}")
-                return []
+                raise e
 
-    async def get_random_records(self, limit: int = 1) -> List[Record]:
+    async def get_all_records(self) -> List[Record]:
+        """Get all records with retries"""
+        try:
+            return await AsyncDatabaseManager._execute_with_retry(self._get_all_records)
+        except Exception as e:
+            logging.error(f"Failed to get all records after retries: {e}")
+            return []
+
+    async def _get_random_records(self, limit: int = 1) -> List[Record]:
         """Get random records"""
         async with self.async_session() as session:
             try:
@@ -300,10 +403,19 @@ class AsyncDatabaseManager:
                 )
                 return list(result.scalars().all())
             except Exception as e:
-                logging.error(f"Error getting random records: {e}")
-                return []
+                raise e
 
-    async def get_records_by_user(self, user_id: int) -> List[Record]:
+    async def get_random_records(self, limit: int = 1) -> List[Record]:
+        """Get random records with retries"""
+        try:
+            return await AsyncDatabaseManager._execute_with_retry(
+                lambda: self._get_random_records(limit)
+            )
+        except Exception as e:
+            logging.error(f"Failed to get random records after retries: {e}")
+            return []
+
+    async def _get_records_by_user(self, user_id: int) -> List[Record]:
         """Get all records for a specific user"""
         async with self.async_session() as session:
             try:
@@ -312,10 +424,19 @@ class AsyncDatabaseManager:
                 )
                 return list(result.scalars().all())
             except Exception as e:
-                logging.error(f"Error getting records: {e}")
-                return []
+                raise e
 
-    async def get_random_record_by_user(self, user_id: int) -> Optional[Record]:
+    async def get_records_by_user(self, user_id: int) -> List[Record]:
+        """Get all records for a specific user with retries"""
+        try:
+            return await AsyncDatabaseManager._execute_with_retry(
+                lambda: self._get_records_by_user(user_id)
+            )
+        except Exception as e:
+            logging.error(f"Failed to get records by user after retries: {e}")
+            return []
+
+    async def _get_random_record_by_user(self, user_id: int) -> Optional[Record]:
         """Get a random record for a specific user"""
         async with self.async_session() as session:
             try:
@@ -327,10 +448,19 @@ class AsyncDatabaseManager:
                 )
                 return result.scalar_one_or_none()
             except Exception as e:
-                logging.error(f"Error getting random record: {e}")
-                return None
+                raise e
 
-    async def delete_record(self, record_id: int) -> bool:
+    async def get_random_record_by_user(self, user_id: int) -> Optional[Record]:
+        """Get a random record for a specific user with retries"""
+        try:
+            return await AsyncDatabaseManager._execute_with_retry(
+                lambda: self._get_random_record_by_user(user_id)
+            )
+        except Exception as e:
+            logging.error(f"Failed to get random record by user after retries: {e}")
+            return None
+
+    async def _delete_record(self, record_id: int) -> bool:
         """Delete a record"""
         async with self.async_session() as session:
             try:
@@ -351,11 +481,20 @@ class AsyncDatabaseManager:
 
             except Exception as e:
                 await session.rollback()
-                logging.error(f"Error deleting record: {e}")
-                return False
+                raise e
+
+    async def delete_record(self, record_id: int) -> bool:
+        """Delete a record with retries"""
+        try:
+            return await AsyncDatabaseManager._execute_with_retry(
+                lambda: self._delete_record(record_id)
+            )
+        except Exception as e:
+            logging.error(f"Failed to delete record after retries: {e}")
+            return False
 
     # Operations for Alias table
-    async def add_alias(self, user_id: int, alias_str: str) -> Optional[Alias]:
+    async def _add_alias(self, user_id: int, alias_str: str) -> Optional[Alias]:
         """Add an alias, create user if it doesn't exist"""
         async with self.async_session() as session:
             try:
@@ -383,10 +522,19 @@ class AsyncDatabaseManager:
 
             except Exception as e:
                 await session.rollback()
-                logging.error(f"Error adding alias: {e}")
-                return None
+                raise e
 
-    async def get_user_by_alias(self, alias_str: str) -> Optional[User]:
+    async def add_alias(self, user_id: int, alias_str: str) -> Optional[Alias]:
+        """Add an alias, create user if it doesn't exist, with retries"""
+        try:
+            return await AsyncDatabaseManager._execute_with_retry(
+                lambda: self._add_alias(user_id, alias_str)
+            )
+        except Exception as e:
+            logging.error(f"Failed to add alias after retries: {e}")
+            return None
+
+    async def _get_user_by_alias(self, alias_str: str) -> Optional[User]:
         """Get user by alias"""
         async with self.async_session() as session:
             try:
@@ -400,8 +548,17 @@ class AsyncDatabaseManager:
                 # Return the associated user
                 return alias.user if alias else None
             except Exception as e:
-                logging.error(f"Error getting user by alias: {e}")
-                return None
+                raise e
+
+    async def get_user_by_alias(self, alias_str: str) -> Optional[User]:
+        """Get user by alias with retries"""
+        try:
+            return await AsyncDatabaseManager._execute_with_retry(
+                lambda: self._get_user_by_alias(alias_str)
+            )
+        except Exception as e:
+            logging.error(f"Failed to get user by alias after retries: {e}")
+            return None
 
 
 # Global async database manager instance
