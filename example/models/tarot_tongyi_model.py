@@ -30,7 +30,7 @@ class TarotTongyiModel(BaseTongyiModel):
 
         # Create a chat completion request with the tarot results and question
         response = await self.client.chat.completions.create(
-            model="qwen-plus-2025-07-14",
+            model="qwen3-max-2025-09-23",
             extra_body={
                 "enable_thinking": False,
             },

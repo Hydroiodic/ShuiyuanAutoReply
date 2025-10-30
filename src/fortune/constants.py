@@ -40,8 +40,8 @@ too_unlucky_to_do = ToDoData("诸事不宜", "床上躺一天", "")
 
 too_lucky = ["大吉"]
 too_unlucky = ["大凶"]
-lucky = ["小吉", "中吉"] + too_lucky
-unlucky = ["凶", "小凶"] + too_unlucky
+lucky = ["小吉", "中吉"] * 3 + too_lucky * 2
+unlucky = ["凶", "小凶"] * 2 + too_unlucky
 fortune_list = lucky + unlucky
 
 # Importing Fonts

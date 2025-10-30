@@ -32,7 +32,7 @@ class TarotGroupModel(BaseTongyiModel):
         """
         # Create a chat completion request with the tarot group info and question
         response = await self.client.chat.completions.create(
-            model="qwen3-32b",
+            model="qwen-flash-2025-07-28",
             extra_body={
                 "enable_thinking": False,
             },
