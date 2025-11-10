@@ -46,6 +46,28 @@ class RecordTopicModel(BaseTopicModel):
         sig_re = r"<div data-signature>.*?</div>"
         return re.sub(sig_re, "", text, flags=re.DOTALL).strip()
 
+    @staticmethod
+    def _parse_prompt_text(raw: str, prompt: str) -> Optional[str]:
+        """
+        Return text after the first occurrence of the prompt in raw.
+        And remove the prompt itself and Shuiyuan signature.
+
+        :param raw: The raw content of the post.
+        :param prompt: The prompt string to look for.
+        :return: The parsed text after the prompt or None if prompt not found.
+        """
+        # Get the text after the first occurrence of the prompt
+        irst_occurrence = raw.find(prompt)
+        if irst_occurrence == -1:
+            return None
+        raw = raw[irst_occurrence:]
+
+        # Remove the keyword itself
+        raw = RecordTopicModel._remove_shuiyuan_signature(
+            raw.replace(prompt, "")
+        ).strip()
+        return raw
+
     async def _add_record_condition(self, raw: str, user: User) -> Optional[str]:
         """
         Check if the raw content of a post contains the string "【记录语录】".
@@ -55,13 +77,9 @@ class RecordTopicModel(BaseTopicModel):
         :return: A string to reply to the post if the condition is met, otherwise None.
         """
         # If the raw content does not contain "【记录语录】", we return None
-        if "【记录语录】" not in raw:
+        raw = RecordTopicModel._parse_prompt_text(raw, "【记录语录】")
+        if raw is None:
             return None
-
-        # Remove the keyword itself
-        raw = RecordTopicModel._remove_shuiyuan_signature(
-            raw.replace("【记录语录】", "")
-        ).strip()
 
         # Get the first line as username/alias, and the rest as the record
         split_result = raw.split("\n", 1)
@@ -117,15 +135,9 @@ class RecordTopicModel(BaseTopicModel):
         :return: A string to reply to the post if the condition is met, otherwise None.
         """
         # If the raw content does not contain "【删除语录】", we return None
-        if "【删除语录】" not in raw:
+        raw = RecordTopicModel._parse_prompt_text(raw, "【删除语录】")
+        if raw is None:
             return None
-
-        # Remove the keyword itself
-        raw = (
-            RecordTopicModel._remove_shuiyuan_signature(raw.replace("【删除语录】", ""))
-            .strip()
-            .lower()
-        )
 
         # Try to parse the ID
         try:
@@ -138,7 +150,7 @@ class RecordTopicModel(BaseTopicModel):
         # Get the record with the given ID
         record = await self.db_manager.get_record(record_id)
         if not record:
-            return BaseTopicModel._make_unique_reply(f"找不到ID为{record_id}的语录")
+            return BaseTopicModel._make_unique_reply(f'找不到ID为 "{record_id}" 的语录')
 
         # Check if the current user has permission to delete this record
         if record.user.user_id != user.id and record.user.allow_others != 1:
@@ -162,15 +174,9 @@ class RecordTopicModel(BaseTopicModel):
         :return: A string to reply to the post if the condition is met, otherwise None.
         """
         # If the raw content does not contain "【查询语录】", we return None
-        if "【查询语录】" not in raw:
+        raw = RecordTopicModel._parse_prompt_text(raw, "【查询语录】")
+        if raw is None:
             return None
-
-        # Get the username
-        raw = (
-            RecordTopicModel._remove_shuiyuan_signature(raw.replace("【查询语录】", ""))
-            .strip()
-            .lower()
-        )
 
         # Split the content by whitespace and take the first part
         split_result = raw.split()
@@ -179,10 +185,10 @@ class RecordTopicModel(BaseTopicModel):
 
         # Get the user_id with alias or username
         raw = split_result[0]
-        db_user = await self.db_manager.get_user_by_alias(raw)
+        db_user = await self.db_manager.get_user_by_alias(raw.lower())
         if not db_user:
             # Get the user from the ShuiyuanModel
-            sy_user = await self.model.get_user_by_username(raw)
+            sy_user = await self.model.get_user_by_username(raw.lower())
             if not sy_user:
                 return BaseTopicModel._make_unique_reply(
                     f"找不到用户名或别名为 '{raw}' 的用户"
@@ -223,15 +229,9 @@ class RecordTopicModel(BaseTopicModel):
         :return: A string to reply to the post if the condition is met, otherwise None.
         """
         # If the raw content does not contain "【获取语录】", we return None
-        if "【获取语录】" not in raw:
+        raw = RecordTopicModel._parse_prompt_text(raw, "【获取语录】")
+        if raw is None:
             return None
-
-        # Remove the keyword itself
-        raw = (
-            RecordTopicModel._remove_shuiyuan_signature(raw.replace("【获取语录】", ""))
-            .strip()
-            .lower()
-        )
 
         # Split the content by whitespace and take the first part
         split_result = raw.split()
@@ -240,10 +240,10 @@ class RecordTopicModel(BaseTopicModel):
 
         # Get the user_id with alias or username
         raw = split_result[0]
-        db_user = await self.db_manager.get_user_by_alias(raw)
+        db_user = await self.db_manager.get_user_by_alias(raw.lower())
         if not db_user:
             # Get the user from the ShuiyuanModel
-            sy_user = await self.model.get_user_by_username(raw)
+            sy_user = await self.model.get_user_by_username(raw.lower())
             if not sy_user:
                 return BaseTopicModel._make_unique_reply(
                     f"找不到用户名或别名为 '{raw}' 的用户"
@@ -277,15 +277,9 @@ class RecordTopicModel(BaseTopicModel):
         :return: A string to reply to the post if the condition is met, otherwise None.
         """
         # If the raw content does not contain "【设置别名】", we return None
-        if "【设置别名】" not in raw:
+        raw = RecordTopicModel._parse_prompt_text(raw, "【设置别名】")
+        if raw is None:
             return None
-
-        # Remove the keyword itself
-        raw = (
-            RecordTopicModel._remove_shuiyuan_signature(raw.replace("【设置别名】", ""))
-            .strip()
-            .lower()
-        )
 
         # Parse the alias and username
         parts = raw.split()
@@ -298,14 +292,14 @@ class RecordTopicModel(BaseTopicModel):
         username = parts[1]
 
         # Check if the alias already exists
-        existing_alias = await self.db_manager.get_user_by_alias(alias)
+        existing_alias = await self.db_manager.get_user_by_alias(alias.lower())
         if existing_alias:
             return BaseTopicModel._make_unique_reply(
                 f"别名 '{alias}' 已被占用，请选择其他别名"
             )
 
         # Get the user from the ShuiyuanModel
-        sy_user = await self.model.get_user_by_username(username)
+        sy_user = await self.model.get_user_by_username(username.lower())
         if not sy_user:
             return BaseTopicModel._make_unique_reply(
                 f"找不到用户名为 '{username}' 的用户"
@@ -317,7 +311,7 @@ class RecordTopicModel(BaseTopicModel):
             return BaseTopicModel._make_unique_reply("创建用户记录失败，请稍后再试")
 
         # Set the alias for the user
-        success = await self.db_manager.add_alias(db_user.user_id, alias)
+        success = await self.db_manager.add_alias(db_user.user_id, alias.lower())
         if not success:
             return BaseTopicModel._make_unique_reply("设置别名失败，请稍后再试")
         return BaseTopicModel._make_unique_reply(
@@ -333,15 +327,9 @@ class RecordTopicModel(BaseTopicModel):
         :return: A string to reply to the post if the condition is met, otherwise None.
         """
         # If the raw content does not contain "【启用语录】", we return None
-        if "【启用语录】" not in raw:
+        raw = RecordTopicModel._parse_prompt_text(raw, "【启用语录】")
+        if raw is None:
             return None
-
-        # Remove the keyword itself
-        raw = (
-            RecordTopicModel._remove_shuiyuan_signature(raw.replace("【启用语录】", ""))
-            .strip()
-            .lower()
-        )
 
         # Split the content by whitespace and take the first part
         split_result = raw.split()
@@ -350,10 +338,10 @@ class RecordTopicModel(BaseTopicModel):
 
         # Determine the value to set
         raw = split_result[0]
-        if raw == "true":
+        if raw.casefold() == "True".casefold():
             enable_value = 1
             response = "已启用您的语录记录功能"
-        elif raw == "false":
+        elif raw.casefold() == "False".casefold():
             enable_value = 0
             response = "已禁用您的语录记录功能"
         else:
@@ -379,15 +367,9 @@ class RecordTopicModel(BaseTopicModel):
         :return: A string to reply to the post if the condition is met, otherwise None.
         """
         # If the raw content does not contain "【更改权限】", we return None
-        if "【更改权限】" not in raw:
+        raw = RecordTopicModel._parse_prompt_text(raw, "【更改权限】")
+        if raw is None:
             return None
-
-        # Remove the keyword itself
-        raw = (
-            RecordTopicModel._remove_shuiyuan_signature(raw.replace("【更改权限】", ""))
-            .strip()
-            .lower()
-        )
 
         # Split the content by whitespace and take the first part
         split_result = raw.split()
@@ -396,10 +378,10 @@ class RecordTopicModel(BaseTopicModel):
 
         # Determine the value to set
         raw = split_result[0]
-        if raw == "true":
+        if raw.casefold() == "True".casefold():
             allow_value = 1
             response = "已允许他人记录和删除您的语录"
-        elif raw == "false":
+        elif raw.casefold() == "False".casefold():
             allow_value = 0
             response = "已禁止他人记录和删除您的语录"
         else:
