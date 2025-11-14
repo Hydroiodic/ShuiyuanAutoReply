@@ -1,6 +1,7 @@
 import io
 import os
 import re
+import time
 import base64
 import pickle
 import aiohttp
@@ -11,7 +12,7 @@ import traceback
 import http.cookies
 from PIL import Image
 from dacite import from_dict
-from typing import Optional
+from typing import Optional, ClassVar
 from .constants import *
 from .objects import *
 
@@ -34,9 +35,17 @@ class ShuiyuanModel:
     We should login to Shuiyuan here.
     """
 
+    _shared_session: ClassVar[Optional[aiohttp.ClientSession]] = None
+    _session_init_lock: ClassVar[Optional[asyncio.Lock]] = None
+    _request_chain: ClassVar[Optional[asyncio.Future]] = None
+    _request_interval: ClassVar[float] = 1.0
+    _last_request_ts: ClassVar[float] = 0.0
+    _active_instances: ClassVar[int] = 0
+
     def __init__(self):
         """
-        Initialize the ShuiyuanModel. Use create() class method for async initialization.
+        Initialize the ShuiyuanModel.
+        Use create() class method for async initialization.
         """
         self.session = None
 
@@ -48,14 +57,61 @@ class ShuiyuanModel:
         :param file_path: The path to the cookies file.
         :return: Initialized ShuiyuanModel instance.
         """
+        # Ensure locks are initialized
+        cls._ensure_locks()
+        # Load the persistence cookie from the specified file path
         instance = cls()
         await instance._load_persistence_cookie(file_path)
+        # Update the active instance count
+        cls._active_instances += 1
         return instance
 
-    async def _update_cookies(self) -> None:
+    @classmethod
+    def _ensure_locks(cls) -> None:
+        # Initialize locks if they are not already initialized
+        if cls._session_init_lock is None:
+            cls._session_init_lock = asyncio.Lock()
+        if cls._request_chain is None:
+            loop = asyncio.get_running_loop()
+            future = loop.create_future()
+            future.set_result(None)
+            cls._request_chain = future
+
+    @classmethod
+    async def _ensure_shared_session(cls, file_path: str) -> aiohttp.ClientSession:
+        # Lock to ensure only one session is created
+        async with cls._session_init_lock:
+            # If already initialized, return it
+            if cls._shared_session is not None and not cls._shared_session.closed:
+                return cls._shared_session
+
+            # Check if the cookies file exists
+            if not os.path.exists(file_path):
+                raise CookiesFileNotFoundError(
+                    "[FILESYSTEM] "
+                    "Failed to find persistent cookies, "
+                    "please run the ipynb file to get them first"
+                )
+
+            # Create a new aiohttp session and load cookies
+            session = aiohttp.ClientSession()
+            with open(file_path, "rb") as f:
+                cookies = pickle.load(f)
+                session.cookie_jar.update_cookies(cookies)
+
+            # Update the shared session using Shuiyuan API
+            cls._shared_session = session
+            await cls._update_cookies()
+            return cls._shared_session
+
+    @classmethod
+    async def _update_cookies(cls) -> None:
+        if cls._shared_session is None:
+            raise RuntimeError("Shared session is not initialized")
+
         # get the cookies
-        self.session.headers.update({"User-Agent": default_user_agent})
-        response = await self.session.get(get_cookies_url)
+        cls._shared_session.headers.update({"User-Agent": default_user_agent})
+        response = await cls._rate_limited_request("get", get_cookies_url)
 
         # now let's try to get CSRF Token from response
         format = r'<meta name="csrf-token" content="([^"]+)"[^>]*>'
@@ -69,25 +125,49 @@ class ShuiyuanModel:
 
         # OK, let's update the CSRF token in the session headers
         csrf_token = match.group(1)
-        self.session.headers.update({"X-CSRF-Token": csrf_token})
+        cls._shared_session.headers.update({"X-CSRF-Token": csrf_token})
 
     async def _load_persistence_cookie(self, file_path: str) -> None:
-        # check if the cookies file exists
-        if not os.path.exists(file_path):
-            raise CookiesFileNotFoundError(
-                "[FILESYSTEM] "
-                "Failed to find persistent cookies, "
-                "please run the ipynb file to get them first"
-            )
+        # load the shared session once and reuse it across instances
+        self.session = await self._ensure_shared_session(file_path)
 
-        # load the cookies from the file
-        self.session = aiohttp.ClientSession()
-        with open(file_path, "rb") as f:
-            cookies = pickle.load(f)
-            self.session.cookie_jar.update_cookies(cookies)
+    @classmethod
+    async def _rate_limited_request(cls, method: str, *args, **kwargs):
+        # Check if the shared session is initialized
+        if cls._shared_session is None:
+            raise RuntimeError("Shared session is not initialized")
 
-        # update the cookies in the session
-        await self._update_cookies()
+        # Get the previous future in the request chain
+        # And create a new one for this request
+        loop = asyncio.get_running_loop()
+        wait_for = cls._request_chain
+        if wait_for is None:
+            wait_for = loop.create_future()
+            wait_for.set_result(None)
+        next_future = loop.create_future()
+        cls._request_chain = next_future
+
+        # Wait until the previous request is done
+        await wait_for
+
+        try:
+            # Calculate the wait time to enforce rate limiting
+            now = time.monotonic()
+            wait_time = cls._request_interval - (now - cls._last_request_ts)
+            if wait_time > 0:
+                await asyncio.sleep(wait_time)
+
+            # Make the actual request
+            request_coro = getattr(cls._shared_session, method)
+            response = await request_coro(*args, **kwargs)
+
+            # Update the last request timestamp
+            cls._last_request_ts = time.monotonic()
+            return response
+        finally:
+            # Whatever happens, we need to set the next future result
+            if not next_future.done():
+                next_future.set_result(None)
 
     async def reply_to_post(
         self,
@@ -112,7 +192,9 @@ class ShuiyuanModel:
 
         # OK, let's post it
         while True:
-            response = await self.session.post(reply_url, data=form_data)
+            response = await self._rate_limited_request(
+                "post", reply_url, data=form_data
+            )
             if response.status == 200:
                 break
             elif response.status == 429:
@@ -128,7 +210,9 @@ class ShuiyuanModel:
         :param topic_id: The ID of the topic to retrieve.
         :return: An instance of TopicDetails containing the topic information.
         """
-        response = await self.session.get(f"{get_topic_url}/{topic_id}.json")
+        response = await self._rate_limited_request(
+            "get", f"{get_topic_url}/{topic_id}.json"
+        )
         if response.status != 200:
             raise Exception(f"Failed to get topic details: {await response.text()}")
 
@@ -142,7 +226,9 @@ class ShuiyuanModel:
         :param username: The username of the user to retrieve.
         :return: An instance of User containing the user information.
         """
-        response = await self.session.get(f"{get_user_url}/{username}.json")
+        response = await self._rate_limited_request(
+            "get", f"{get_user_url}/{username}.json"
+        )
         if response.status == 404:
             logging.warning(f"User '{username}' not found.")
             return None
@@ -162,7 +248,9 @@ class ShuiyuanModel:
         :param post_id: The ID of the post to retrieve.
         :return: An instance of PostDetails containing the post information.
         """
-        response = await self.session.get(f"{reply_url}/{post_id}.json")
+        response = await self._rate_limited_request(
+            "get", f"{reply_url}/{post_id}.json"
+        )
         if response.status != 200:
             raise Exception(f"Failed to get post details: {await response.text()}")
 
@@ -190,7 +278,9 @@ class ShuiyuanModel:
             content_type="image/jpeg",
         )
 
-        response = await self.session.post(upload_url, data=form_data, timeout=10)
+        response = await self._rate_limited_request(
+            "post", upload_url, data=form_data, timeout=10
+        )
         if response.status != 200:
             raise Exception(f"Failed to upload image: {await response.text()}")
 
@@ -287,8 +377,7 @@ class ShuiyuanModel:
         """
         Close the aiohttp session and clean up resources.
         """
-        if self.session and not self.session.closed:
-            await self.session.close()
+        await type(self)._decrement_instance_and_maybe_close()
 
     async def __aenter__(self):
         """
@@ -301,6 +390,26 @@ class ShuiyuanModel:
         Async context manager exit. Automatically closes the session.
         """
         await self.close()
+
+    @classmethod
+    async def _decrement_instance_and_maybe_close(cls) -> None:
+        if cls._active_instances > 0:
+            cls._active_instances -= 1
+
+        if cls._active_instances == 0:
+            await cls._close_shared_session()
+
+    @classmethod
+    async def _close_shared_session(cls) -> None:
+        # Lock to ensure no re-creation during closing
+        with cls._session_init_lock:
+            if cls._shared_session and not cls._shared_session.closed:
+                await cls._shared_session.close()
+
+        # Set shared session variables to None
+        cls._shared_session = None
+        cls._request_chain = None
+        cls._last_request_ts = 0.0
 
 
 def _global_ignore_illegal_cookies() -> None:
