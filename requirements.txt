@@ -4,9 +4,12 @@ apscheduler
 asyncio
 dacite
 dotenv
+neomodel
+numpy
 openai
 pandas
 pillow
 pymysql
+sentence-transformers
 skia-python
 sqlalchemy

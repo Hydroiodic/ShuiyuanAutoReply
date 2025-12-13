@@ -65,6 +65,7 @@ class BaseTarotGroup:
     def set_tarot_results(self, tarot_results: List[TarotResult]):
         """
         Set the tarot results for the group.
+
         :param tarot_results: A list of tarot results to set.
         """
         self.tarot_results = tarot_results

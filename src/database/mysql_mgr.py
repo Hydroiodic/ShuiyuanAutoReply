@@ -79,7 +79,7 @@ class Alias(Base):
         return f"<Alias(alias_id={self.alias_id}, alias_str={self.alias_str}, user_id={self.user_id})>"
 
 
-class AsyncDatabaseManager:
+class AsyncMysqlDatabaseManager:
     """Asynchronous database manager for handling database operations"""
 
     def __init__(self):
@@ -149,7 +149,7 @@ class AsyncDatabaseManager:
     async def add_user(self, user_id: int) -> Optional[User]:
         """Add a new user with retries"""
         try:
-            return await AsyncDatabaseManager._execute_with_retry(
+            return await AsyncMysqlDatabaseManager._execute_with_retry(
                 lambda: self._add_user(user_id)
             )
         except Exception as e:
@@ -170,7 +170,7 @@ class AsyncDatabaseManager:
     async def get_user(self, user_id: int) -> Optional[User]:
         """Get user by ID with retries"""
         try:
-            return await AsyncDatabaseManager._execute_with_retry(
+            return await AsyncMysqlDatabaseManager._execute_with_retry(
                 lambda: self._get_user(user_id)
             )
         except Exception as e:
@@ -204,7 +204,7 @@ class AsyncDatabaseManager:
     async def get_or_add_user(self, user_id: int) -> Optional[User]:
         """Get user by ID, create if not exists, with retries"""
         try:
-            return await AsyncDatabaseManager._execute_with_retry(
+            return await AsyncMysqlDatabaseManager._execute_with_retry(
                 lambda: self._get_or_add_user(user_id)
             )
         except Exception as e:
@@ -256,7 +256,7 @@ class AsyncDatabaseManager:
     ) -> bool:
         """Update user information with retries"""
         try:
-            return await AsyncDatabaseManager._execute_with_retry(
+            return await AsyncMysqlDatabaseManager._execute_with_retry(
                 lambda: self._update_user(user_id, coin, enable_record, allow_others)
             )
         except Exception as e:
@@ -289,7 +289,7 @@ class AsyncDatabaseManager:
     async def delete_user(self, user_id: int) -> bool:
         """Delete a user and all associated records with retries"""
         try:
-            return await AsyncDatabaseManager._execute_with_retry(
+            return await AsyncMysqlDatabaseManager._execute_with_retry(
                 lambda: self._delete_user(user_id)
             )
         except Exception as e:
@@ -308,7 +308,9 @@ class AsyncDatabaseManager:
     async def get_all_users(self) -> List[User]:
         """Get all users with retries"""
         try:
-            return await AsyncDatabaseManager._execute_with_retry(self._get_all_users)
+            return await AsyncMysqlDatabaseManager._execute_with_retry(
+                self._get_all_users
+            )
         except Exception as e:
             logging.error(f"Failed to get all users after retries: {e}")
             return []
@@ -347,7 +349,7 @@ class AsyncDatabaseManager:
     async def add_record(self, user_id: int, record_str: str) -> Optional[Record]:
         """Add a record, create user if it doesn't exist, with retries"""
         try:
-            return await AsyncDatabaseManager._execute_with_retry(
+            return await AsyncMysqlDatabaseManager._execute_with_retry(
                 lambda: self._add_record(user_id, record_str)
             )
         except Exception as e:
@@ -370,7 +372,7 @@ class AsyncDatabaseManager:
     async def get_record(self, record_id: int) -> Optional[Record]:
         """Get record by ID with retries"""
         try:
-            return await AsyncDatabaseManager._execute_with_retry(
+            return await AsyncMysqlDatabaseManager._execute_with_retry(
                 lambda: self._get_record(record_id)
             )
         except Exception as e:
@@ -389,7 +391,9 @@ class AsyncDatabaseManager:
     async def get_all_records(self) -> List[Record]:
         """Get all records with retries"""
         try:
-            return await AsyncDatabaseManager._execute_with_retry(self._get_all_records)
+            return await AsyncMysqlDatabaseManager._execute_with_retry(
+                self._get_all_records
+            )
         except Exception as e:
             logging.error(f"Failed to get all records after retries: {e}")
             return []
@@ -408,7 +412,7 @@ class AsyncDatabaseManager:
     async def get_random_records(self, limit: int = 1) -> List[Record]:
         """Get random records with retries"""
         try:
-            return await AsyncDatabaseManager._execute_with_retry(
+            return await AsyncMysqlDatabaseManager._execute_with_retry(
                 lambda: self._get_random_records(limit)
             )
         except Exception as e:
@@ -429,7 +433,7 @@ class AsyncDatabaseManager:
     async def get_records_by_user(self, user_id: int) -> List[Record]:
         """Get all records for a specific user with retries"""
         try:
-            return await AsyncDatabaseManager._execute_with_retry(
+            return await AsyncMysqlDatabaseManager._execute_with_retry(
                 lambda: self._get_records_by_user(user_id)
             )
         except Exception as e:
@@ -453,7 +457,7 @@ class AsyncDatabaseManager:
     async def get_random_record_by_user(self, user_id: int) -> Optional[Record]:
         """Get a random record for a specific user with retries"""
         try:
-            return await AsyncDatabaseManager._execute_with_retry(
+            return await AsyncMysqlDatabaseManager._execute_with_retry(
                 lambda: self._get_random_record_by_user(user_id)
             )
         except Exception as e:
@@ -486,7 +490,7 @@ class AsyncDatabaseManager:
     async def delete_record(self, record_id: int) -> bool:
         """Delete a record with retries"""
         try:
-            return await AsyncDatabaseManager._execute_with_retry(
+            return await AsyncMysqlDatabaseManager._execute_with_retry(
                 lambda: self._delete_record(record_id)
             )
         except Exception as e:
@@ -527,7 +531,7 @@ class AsyncDatabaseManager:
     async def add_alias(self, user_id: int, alias_str: str) -> Optional[Alias]:
         """Add an alias, create user if it doesn't exist, with retries"""
         try:
-            return await AsyncDatabaseManager._execute_with_retry(
+            return await AsyncMysqlDatabaseManager._execute_with_retry(
                 lambda: self._add_alias(user_id, alias_str)
             )
         except Exception as e:
@@ -553,7 +557,7 @@ class AsyncDatabaseManager:
     async def get_user_by_alias(self, alias_str: str) -> Optional[User]:
         """Get user by alias with retries"""
         try:
-            return await AsyncDatabaseManager._execute_with_retry(
+            return await AsyncMysqlDatabaseManager._execute_with_retry(
                 lambda: self._get_user_by_alias(alias_str)
             )
         except Exception as e:
@@ -562,4 +566,4 @@ class AsyncDatabaseManager:
 
 
 # Global async database manager instance
-global_async_db_manager = AsyncDatabaseManager()
+global_async_mysql_manager = AsyncMysqlDatabaseManager()

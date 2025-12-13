@@ -34,9 +34,9 @@ async def main():
 
     async with await ShuiyuanModel.create() as model:
         # Let's try to get the post streams
-        tarot_topic_model = TarotTopicModel(model, 388001)
+        tarot_topic_model = TarotTopicModel(model, 430919)
         stock_topic_model = StockTopicModel(model, 392286)
-        record_topic_model = RecordTopicModel(model, 429472)
+        record_topic_model = RecordTopicModel(model, 432560)
 
         stock_topic_model.add_time_routine(TimeInADay(hour=9, minute=30), True)
         stock_topic_model.add_time_routine(TimeInADay(hour=11, minute=30), True)

@@ -1,13 +1,15 @@
 import re
 import logging
 import traceback
+from .record_tongyi_model import RecordTongyiModel
 from typing import Optional
 from datetime import datetime
 from src.shuiyuan.objects import User
 from src.shuiyuan.shuiyuan_model import ShuiyuanModel
 from src.shuiyuan.topic_model import BaseTopicModel
 from src.constants import auto_reply_tag
-from src.database.manager import global_async_db_manager
+from src.database.mysql_mgr import global_async_mysql_manager
+from src.database.neo4j_mgr import global_async_neo4j_manager
 
 
 class RecordTopicModel(BaseTopicModel):
@@ -23,7 +25,9 @@ class RecordTopicModel(BaseTopicModel):
         :param topic_id: The ID of the topic to be managed.
         """
         super().__init__(model, topic_id)
-        self.db_manager = global_async_db_manager
+        self.mysql_manager = global_async_mysql_manager
+        self.neo4j_manager = global_async_neo4j_manager
+        self.record_tongyi_model = RecordTongyiModel()
 
     @staticmethod
     def _to_quote_format(text: str) -> str:
@@ -94,7 +98,7 @@ class RecordTopicModel(BaseTopicModel):
             return BaseTopicModel._make_unique_reply("语录内容不能为空")
 
         # Get the user_id with alias or username
-        db_user = await self.db_manager.get_user_by_alias(raw_username)
+        db_user = await self.mysql_manager.get_user_by_alias(raw_username)
         if not db_user:
             # Get the user from the ShuiyuanModel
             sy_user = await self.model.get_user_by_username(raw_username)
@@ -103,7 +107,7 @@ class RecordTopicModel(BaseTopicModel):
                     f"找不到用户名或别名为 '{raw_username}' 的用户"
                 )
             # OK, now we got the user_id
-            db_user = await self.db_manager.get_or_add_user(sy_user.id)
+            db_user = await self.mysql_manager.get_or_add_user(sy_user.id)
 
         if not db_user:
             return BaseTopicModel._make_unique_reply("创建用户记录失败，请稍后再试")
@@ -117,7 +121,7 @@ class RecordTopicModel(BaseTopicModel):
             return BaseTopicModel._make_unique_reply("您没有权限为该用户添加语录")
 
         # Add the record content to the database
-        new_record = await self.db_manager.add_record(db_user.user_id, raw)
+        new_record = await self.mysql_manager.add_record(db_user.user_id, raw)
         if not new_record:
             return BaseTopicModel._make_unique_reply("添加语录失败，请稍后再试")
 
@@ -148,7 +152,7 @@ class RecordTopicModel(BaseTopicModel):
             )
 
         # Get the record with the given ID
-        record = await self.db_manager.get_record(record_id)
+        record = await self.mysql_manager.get_record(record_id)
         if not record:
             return BaseTopicModel._make_unique_reply(f'找不到ID为 "{record_id}" 的语录')
 
@@ -157,7 +161,7 @@ class RecordTopicModel(BaseTopicModel):
             return BaseTopicModel._make_unique_reply("您没有权限删除此语录")
 
         # Remove the record from the database
-        success = await self.db_manager.delete_record(record_id)
+        success = await self.mysql_manager.delete_record(record_id)
         if not success:
             return BaseTopicModel._make_unique_reply("删除语录失败，请稍后再试")
 
@@ -185,7 +189,7 @@ class RecordTopicModel(BaseTopicModel):
 
         # Get the user_id with alias or username
         raw = split_result[0]
-        db_user = await self.db_manager.get_user_by_alias(raw.lower())
+        db_user = await self.mysql_manager.get_user_by_alias(raw.lower())
         if not db_user:
             # Get the user from the ShuiyuanModel
             sy_user = await self.model.get_user_by_username(raw.lower())
@@ -194,7 +198,7 @@ class RecordTopicModel(BaseTopicModel):
                     f"找不到用户名或别名为 '{raw}' 的用户"
                 )
             # OK, now we got the user_id
-            db_user = await self.db_manager.get_or_add_user(sy_user.id)
+            db_user = await self.mysql_manager.get_or_add_user(sy_user.id)
 
         if not db_user:
             return BaseTopicModel._make_unique_reply(f"数据库错误，请稍后再试")
@@ -204,7 +208,7 @@ class RecordTopicModel(BaseTopicModel):
             return BaseTopicModel._make_unique_reply("该用户未开启或已禁用语录记录功能")
 
         # Get all records for this user
-        all_records = await self.db_manager.get_records_by_user(db_user.user_id)
+        all_records = await self.mysql_manager.get_records_by_user(db_user.user_id)
         if not all_records:
             return BaseTopicModel._make_unique_reply("该用户当前没有语录记录")
 
@@ -240,7 +244,7 @@ class RecordTopicModel(BaseTopicModel):
 
         # Get the user_id with alias or username
         raw = split_result[0]
-        db_user = await self.db_manager.get_user_by_alias(raw.lower())
+        db_user = await self.mysql_manager.get_user_by_alias(raw.lower())
         if not db_user:
             # Get the user from the ShuiyuanModel
             sy_user = await self.model.get_user_by_username(raw.lower())
@@ -249,7 +253,7 @@ class RecordTopicModel(BaseTopicModel):
                     f"找不到用户名或别名为 '{raw}' 的用户"
                 )
             # OK, now we got the user_id
-            db_user = await self.db_manager.get_or_add_user(sy_user.id)
+            db_user = await self.mysql_manager.get_or_add_user(sy_user.id)
 
         if not db_user:
             return BaseTopicModel._make_unique_reply(f"数据库错误，请稍后再试")
@@ -259,7 +263,9 @@ class RecordTopicModel(BaseTopicModel):
             return BaseTopicModel._make_unique_reply("该用户未开启或已禁用语录记录功能")
 
         # Get one random record for this user
-        rand_record = await self.db_manager.get_random_record_by_user(db_user.user_id)
+        rand_record = await self.mysql_manager.get_random_record_by_user(
+            db_user.user_id
+        )
         if not rand_record:
             return BaseTopicModel._make_unique_reply("该用户当前没有语录记录")
 
@@ -292,7 +298,7 @@ class RecordTopicModel(BaseTopicModel):
         username = parts[1]
 
         # Check if the alias already exists
-        existing_alias = await self.db_manager.get_user_by_alias(alias.lower())
+        existing_alias = await self.mysql_manager.get_user_by_alias(alias.lower())
         if existing_alias:
             return BaseTopicModel._make_unique_reply(
                 f"别名 '{alias}' 已被占用，请选择其他别名"
@@ -306,12 +312,12 @@ class RecordTopicModel(BaseTopicModel):
             )
 
         # Get or create the user in the database
-        db_user = await self.db_manager.get_or_add_user(sy_user.id)
+        db_user = await self.mysql_manager.get_or_add_user(sy_user.id)
         if not db_user:
             return BaseTopicModel._make_unique_reply("创建用户记录失败，请稍后再试")
 
         # Set the alias for the user
-        success = await self.db_manager.add_alias(db_user.user_id, alias.lower())
+        success = await self.mysql_manager.add_alias(db_user.user_id, alias.lower())
         if not success:
             return BaseTopicModel._make_unique_reply("设置别名失败，请稍后再试")
         return BaseTopicModel._make_unique_reply(
@@ -348,12 +354,14 @@ class RecordTopicModel(BaseTopicModel):
             return BaseTopicModel._make_unique_reply("参数无效，请使用 True 或 False")
 
         # Get or create the user in the database
-        db_user = await self.db_manager.get_or_add_user(user.id)
+        db_user = await self.mysql_manager.get_or_add_user(user.id)
         if not db_user:
             return BaseTopicModel._make_unique_reply("创建用户记录失败，请稍后再试")
 
         # Update the user's enable_record setting
-        success = await self.db_manager.update_user(user.id, enable_record=enable_value)
+        success = await self.mysql_manager.update_user(
+            user.id, enable_record=enable_value
+        )
         if not success:
             return BaseTopicModel._make_unique_reply("更新设置失败，请稍后再试")
         return BaseTopicModel._make_unique_reply(response)
@@ -388,15 +396,46 @@ class RecordTopicModel(BaseTopicModel):
             return BaseTopicModel._make_unique_reply("参数无效，请使用 True 或 False")
 
         # Get or create the user in the database
-        db_user = await self.db_manager.get_or_add_user(user.id)
+        db_user = await self.mysql_manager.get_or_add_user(user.id)
         if not db_user:
             return BaseTopicModel._make_unique_reply("创建用户记录失败，请稍后再试")
 
         # Update the user's allow_others setting
-        success = await self.db_manager.update_user(user.id, allow_others=allow_value)
+        success = await self.mysql_manager.update_user(
+            user.id, allow_others=allow_value
+        )
         if not success:
             return BaseTopicModel._make_unique_reply("更新设置失败，请稍后再试")
         return BaseTopicModel._make_unique_reply(response)
+
+    async def _pumpkin_condition(self, raw: str, user: User) -> Optional[str]:
+        """
+        Check if the raw content of a post contains the string "【小南瓜】".
+
+        :param raw: The raw content of the post.
+        :param user: The user who posted the message.
+        :return: A string to reply to the post if the condition is met, otherwise None.
+        """
+        # If the raw content does not contain "【小南瓜】", we return None
+        raw = RecordTopicModel._parse_prompt_text(raw, "【小南瓜】")
+        if raw is None:
+            return None
+
+        # Use the Neo4j manager to get the most relevant response
+        response = await self.neo4j_manager.search_similar(
+            query_text=f"{user.username}:\n{raw}",
+            top_k=25,
+        )
+        if not response:
+            return BaseTopicModel._make_unique_reply(
+                "数据库错误，暂时无法处理您的请求，请稍后再试"
+            )
+
+        # Let the Tongyi model respond based on conversation and similar responses
+        reply_content = await self.record_tongyi_model.get_pumpkin_response(
+            raw, [item.text for item in response], user
+        )
+        return BaseTopicModel._make_unique_reply(reply_content)
 
     def _help_condition(self, raw: str) -> Optional[str]:
         """
@@ -418,7 +457,8 @@ class RecordTopicModel(BaseTopicModel):
             "5. 输入【启用语录】+True/False，允许/禁止当前用户的语录被记录（默认禁止） :white_check_mark:\n"
             "6. 输入【更改权限】+True/False，允许/禁止当前用户的语录被他人记录/删除 （默认禁止） :lock:\n"
             "7. 输入【设置别名】+别名+用户名，设置某个别名对应的用户名（不会由于昵称更改而被影响） :label:\n"
-            "8. 输入【帮助】，查看该帮助信息 :question:"
+            "8. 输入【小南瓜】+对话，与南瓜bot聊天 :jack_o_lantern:\n"
+            "9. 输入【帮助】，查看该帮助信息 :question:"
         )
 
     async def _new_post_routine(self, post_id: int) -> None:
@@ -499,6 +539,11 @@ class RecordTopicModel(BaseTopicModel):
             if text is not None:
                 return
 
+            # Check pumpkin condition
+            text = await self._pumpkin_condition(post_details.raw, post_user)
+            if text is not None:
+                return
+
         except Exception:
             # If we failed to get the post details or any other error occurred
             logging.error(
@@ -520,7 +565,7 @@ class RecordTopicModel(BaseTopicModel):
 
     async def _daily_routine(self) -> None:
         # Get at most 3 random records from the database
-        random_records = await self.db_manager.get_random_records(3)
+        random_records = await self.mysql_manager.get_random_records(3)
         if not random_records:
             logging.warning("No records found in database for daily routine.")
             return

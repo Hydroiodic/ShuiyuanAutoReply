@@ -18,14 +18,14 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.database.manager import global_async_db_manager
+from src.database.mysql_mgr import global_async_mysql_manager
 
 
 async def init_database():
     """Initialize the database"""
     try:
         logging.info("Creating database tables...")
-        await global_async_db_manager.create_tables()
+        await global_async_mysql_manager.create_tables()
         logging.info("Database initialized successfully!")
     except Exception as e:
         logging.error(f"Error initializing database: {e}")
