@@ -90,7 +90,6 @@ class BaseTopicModel:
                     f"Failed to get topic details for {self.topic_id}, "
                     f"traceback is as follows:\n{traceback.format_exc()}"
                 )
-                await asyncio.sleep(5)
                 continue
 
             # OK, let's difference the current stream with the new one
@@ -115,9 +114,6 @@ class BaseTopicModel:
 
             # Update the stream list with the new stream
             self.stream_list = new_stream
-
-            # Sleep or wait for a condition to avoid busy waiting
-            await asyncio.sleep(5)
 
     def add_time_routine(
         self,
