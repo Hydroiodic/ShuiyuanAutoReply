@@ -55,7 +55,7 @@ class M3EEmbeddings(Embeddings):
         return embedding.tolist()
 
 
-class RecordTongyiModel:
+class MentionTongyiModel:
     """
     A model for managing Tongyi Qianwen data.
     """

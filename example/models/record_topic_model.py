@@ -1,7 +1,6 @@
 import re
 import logging
 import traceback
-from .record_tongyi_model import RecordTongyiModel
 from typing import Optional
 from datetime import datetime
 from src.shuiyuan.objects import User
@@ -25,7 +24,6 @@ class RecordTopicModel(BaseTopicModel):
         """
         super().__init__(model, topic_id)
         self.mysql_manager = global_async_mysql_manager
-        self.record_tongyi_model = RecordTongyiModel()
 
     @staticmethod
     def _to_quote_format(text: str) -> str:
@@ -406,23 +404,6 @@ class RecordTopicModel(BaseTopicModel):
             return BaseTopicModel._make_unique_reply("更新设置失败，请稍后再试")
         return BaseTopicModel._make_unique_reply(response)
 
-    async def _pumpkin_condition(self, raw: str, user: User) -> Optional[str]:
-        """
-        Check if the raw content of a post contains the string "【小南瓜】".
-
-        :param raw: The raw content of the post.
-        :param user: The user who posted the message.
-        :return: A string to reply to the post if the condition is met, otherwise None.
-        """
-        # If the raw content does not contain "【小南瓜】", we return None
-        raw = RecordTopicModel._parse_prompt_text(raw, "【小南瓜】")
-        if raw is None:
-            return None
-
-        # Let the Tongyi model respond based on conversation and similar responses
-        reply = await self.record_tongyi_model.get_pumpkin_response(raw, user)
-        return BaseTopicModel._make_unique_reply(reply)
-
     def _help_condition(self, raw: str) -> Optional[str]:
         """
         Check if the raw content of a post contains the string "【帮助】".
@@ -443,8 +424,7 @@ class RecordTopicModel(BaseTopicModel):
             "5. 输入【启用语录】+True/False，允许/禁止当前用户的语录被记录（默认禁止） :white_check_mark:\n"
             "6. 输入【更改权限】+True/False，允许/禁止当前用户的语录被他人记录/删除 （默认禁止） :lock:\n"
             "7. 输入【设置别名】+别名+用户名，设置某个别名对应的用户名（不会由于昵称更改而被影响） :label:\n"
-            "8. 输入【小南瓜】+对话，与南瓜bot聊天 :jack_o_lantern:\n"
-            "9. 输入【帮助】，查看该帮助信息 :question:"
+            "8. 输入【帮助】，查看该帮助信息 :question:"
         )
 
     async def _new_post_routine(self, post_id: int) -> None:
@@ -522,11 +502,6 @@ class RecordTopicModel(BaseTopicModel):
 
             # Check get_record condition
             text = await self._get_record_condition(post_details.raw, post_user)
-            if text is not None:
-                return
-
-            # Check pumpkin condition
-            text = await self._pumpkin_condition(post_details.raw, post_user)
             if text is not None:
                 return
 

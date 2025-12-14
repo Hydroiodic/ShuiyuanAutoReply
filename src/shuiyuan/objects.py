@@ -102,6 +102,48 @@ class TopicDetails:
 
 
 @dataclass
+class MentionNotificationDetails:
+    """
+    Represents the details of an @ notification.
+    """
+
+    excerpt: str
+    action_type: int
+    created_at: str
+    avatar_template: str
+    acting_avatar_template: str
+    slug: str
+    topic_id: int
+    target_user_id: int
+    target_name: str
+    target_username: str
+    post_number: int
+    post_id: int
+    username: str
+    name: Optional[str]
+    user_id: int
+    acting_username: str
+    acting_name: Optional[str]
+    acting_user_id: int
+    title: str
+    deleted: bool
+    hidden: bool
+    post_type: int
+    category_id: int
+    closed: bool
+    archived: bool
+
+
+@dataclass
+class MentionNotification:
+    """
+    Represents an @ notification.
+    """
+
+    user_actions: List[MentionNotificationDetails]
+
+
+@dataclass
 class ImageUploadPayload:
     """
     Represents the payload for an image upload.
@@ -129,6 +171,16 @@ class ImageUploadResponse:
 
 
 @dataclass
+class ImageURL:
+    """
+    Represents an image URL.
+    """
+
+    type: Literal["url", "base64"]
+    data: str
+
+
+@dataclass
 class TimeInADay:
     """
     Represents a time in a day.
@@ -137,13 +189,3 @@ class TimeInADay:
     hour: int
     minute: int
     second: int = 0
-
-
-@dataclass
-class ImageURL:
-    """
-    Represents an image URL.
-    """
-
-    type: Literal["url", "base64"]
-    data: str
