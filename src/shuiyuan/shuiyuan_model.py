@@ -257,21 +257,23 @@ class ShuiyuanModel:
         data = await response.json()
         return from_dict(PostDetails, data)
 
-    async def get_mention_notification(self, username: str) -> MentionNotification:
+    async def get_actions(self, username: str, filter: List[int]) -> UserActions:
         """
-        Get the latest posts that mentioned the specified username. (Only self is allowed)
+        Get the latest actions for a given username and filter.
 
-        :param username: The username to check for mentions.
-        :return: An instance of MentionNotification containing the mention information.
+        :param username: The username to check actions for.
+        :param filter: The list of action types to filter.
+        :return: An instance of UserActions containing the mention information.
         """
         response = await self._rate_limited_request(
-            "get", f"{action_url}?offset=0&username={username}&filter=7"
+            "get",
+            f"{action_url}?offset=0&username={username}&filter={",".join(map(str, filter))}",
         )
         if response.status != 200:
             raise Exception(f"Failed to get at notifications: {await response.text()}")
 
         data = await response.json()
-        return from_dict(MentionNotification, data)
+        return from_dict(UserActions, data)
 
     async def upload_image(self, image_bytes: bytes) -> ImageUploadResponse:
         """

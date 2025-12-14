@@ -49,7 +49,7 @@ async def main():
         record_topic_model.start_scheduler()
 
         await asyncio.gather(
-            mention_model.watch_new_mention_routine(),
+            mention_model.watch_new_action_routine(),
             tarot_topic_model.watch_new_post_routine(),
             # stock_topic_model.watch_new_post_routine(),
             record_topic_model.watch_new_post_routine(),

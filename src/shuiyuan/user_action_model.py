@@ -2,26 +2,29 @@ import asyncio
 import random
 import logging
 import traceback
+from typing import List
 from abc import abstractmethod
-from .objects import MentionNotificationDetails
+from .objects import UserActionDetails
 from .shuiyuan_model import ShuiyuanModel
 from ..constants import auto_reply_tag
 
 
-class BaseMentionModel:
+class BaseUserActionModel:
     """
     A class to represent a mention model.
     """
 
-    def __init__(self, model: ShuiyuanModel, username: str):
+    def __init__(self, model: ShuiyuanModel, username: str, action_type: List[int]):
         """
         Initialize the MentionModel with a ShuiyuanModel instance.
 
         :param model: An instance of ShuiyuanModel.
         :param username: The username to be managed.
+        :param action_type: The list of action types to monitor.
         """
         self.model = model
         self.username = username
+        self.action_type = action_type
         self.stream_list = []
 
     @staticmethod
@@ -49,40 +52,39 @@ class BaseMentionModel:
         """
         return (
             f"{base}\n\n"
-            f"<!-- {BaseMentionModel._generate_random_string(20)} -->\n"
+            f"<!-- {BaseUserActionModel._generate_random_string(20)} -->\n"
             f"{auto_reply_tag}"
         )
 
     @abstractmethod
-    async def _new_mention_routine(self, mention: MentionNotificationDetails) -> None:
+    async def _new_action_routine(self, action: UserActionDetails) -> None:
         """
-        A routine to handle a new post in the topic.
+        A routine to handle new actions.
         NOTE: no exception should be raised in this method.
 
-        :param mention: The mention notification details.
+        :param action: The details of the action notification.
         :return: None
         """
         pass
 
-    async def watch_new_mention_routine(self) -> None:
+    async def watch_new_action_routine(self) -> None:
         """
-        A routine to watch for new mentions of the user.
-        This method can be extended to implement real-time updates or periodic checks.
+        A routine to watch for new actions.
         """
         while True:
             # Get the mention details
             try:
-                mentions = await self.model.get_mention_notification(self.username)
-                mention_details = mentions.user_actions
+                actions = await self.model.get_actions(self.username, self.action_type)
+                action_details = actions.user_actions
             except Exception:
                 logging.error(
-                    f"Failed to get mention details for {self.topic_id}, "
+                    f"Failed to get action details for {self.username}, "
                     f"traceback is as follows:\n{traceback.format_exc()}"
                 )
                 continue
 
             # OK, let's difference the current stream with the new one
-            new_stream = [mention.post_id for mention in mention_details]
+            new_stream = [detail.post_id for detail in action_details]
 
             # If the stream list is empty, we should initialize it
             if not self.stream_list:
@@ -100,11 +102,11 @@ class BaseMentionModel:
             if last_stream is not None:
                 # Slice the new stream to get only the new posts
                 last_index = new_stream.index(last_stream) + 1
-                new_mentions = mention_details[:last_index]
+                new_actions = action_details[:last_index]
 
                 # OK, we have find the new posts, we should do some routine with them
                 routines = [
-                    self._new_mention_routine(mention) for mention in new_mentions
+                    self._new_action_routine(mention) for mention in new_actions
                 ]
                 asyncio.gather(*routines)
 

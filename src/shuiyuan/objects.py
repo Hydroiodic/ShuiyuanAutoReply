@@ -102,9 +102,9 @@ class TopicDetails:
 
 
 @dataclass
-class MentionNotificationDetails:
+class UserActionDetails:
     """
-    Represents the details of an @ notification.
+    Represents the details of a user action entry.
     """
 
     excerpt: str
@@ -135,12 +135,12 @@ class MentionNotificationDetails:
 
 
 @dataclass
-class MentionNotification:
+class UserActions:
     """
-    Represents an @ notification.
+    Represents the user actions.
     """
 
-    user_actions: List[MentionNotificationDetails]
+    user_actions: List[UserActionDetails]
 
 
 @dataclass
