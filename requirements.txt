@@ -3,7 +3,9 @@ aiomysql
 apscheduler
 asyncio
 dacite
+dashscope
 dotenv
+langchain-community
 neomodel
 numpy
 openai

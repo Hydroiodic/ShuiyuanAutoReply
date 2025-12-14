@@ -27,7 +27,7 @@ async def main():
     try:
         logging.info("Searching for similar sentences...")
         query = "533"
-        results = await global_async_neo4j_manager.search_similar(query, top_k=10)
+        results = await global_async_neo4j_manager.search_similar(query, top_k=25)
         for res in results:
             logging.info(
                 f"Text: {res.text}, Category: {res.category}, Score: {res.score}"

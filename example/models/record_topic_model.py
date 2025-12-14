@@ -7,9 +7,8 @@ from datetime import datetime
 from src.shuiyuan.objects import User
 from src.shuiyuan.shuiyuan_model import ShuiyuanModel
 from src.shuiyuan.topic_model import BaseTopicModel
-from src.constants import auto_reply_tag
 from src.database.mysql_mgr import global_async_mysql_manager
-from src.database.neo4j_mgr import global_async_neo4j_manager
+from src.constants import auto_reply_tag
 
 
 class RecordTopicModel(BaseTopicModel):
@@ -26,7 +25,6 @@ class RecordTopicModel(BaseTopicModel):
         """
         super().__init__(model, topic_id)
         self.mysql_manager = global_async_mysql_manager
-        self.neo4j_manager = global_async_neo4j_manager
         self.record_tongyi_model = RecordTongyiModel()
 
     @staticmethod
@@ -421,21 +419,9 @@ class RecordTopicModel(BaseTopicModel):
         if raw is None:
             return None
 
-        # Use the Neo4j manager to get the most relevant response
-        response = await self.neo4j_manager.search_similar(
-            query_text=f"{user.username}:\n{raw}",
-            top_k=25,
-        )
-        if not response:
-            return BaseTopicModel._make_unique_reply(
-                "数据库错误，暂时无法处理您的请求，请稍后再试"
-            )
-
         # Let the Tongyi model respond based on conversation and similar responses
-        reply_content = await self.record_tongyi_model.get_pumpkin_response(
-            raw, [item.text for item in response], user
-        )
-        return BaseTopicModel._make_unique_reply(reply_content)
+        reply = await self.record_tongyi_model.get_pumpkin_response(raw, user)
+        return BaseTopicModel._make_unique_reply(reply)
 
     def _help_condition(self, raw: str) -> Optional[str]:
         """

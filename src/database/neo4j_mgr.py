@@ -22,7 +22,7 @@ class SentenceResponse(BaseModel):
 
 class AsyncNeo4jDatabaseManager:
 
-    def __init__(self, model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"):
+    def __init__(self, model_name: str = "moka-ai/m3e-base"):
         self.driver = AsyncGraphDatabase.driver(
             uri=os.getenv("NEO4J_DB_URL"),
             auth=eval(os.getenv("NEO4J_DB_AUTH")),
@@ -48,11 +48,18 @@ class AsyncNeo4jDatabaseManager:
 
         # Create the vector index for sentence embeddings
         async with self.driver.session(database=self.database_name) as session:
+            # Delete the index if it exists
+            await session.run(
+                """
+                DROP INDEX sentence_embeddings IF EXISTS
+                """
+            )
+            # Create the vector index afterwards
             await session.run(
                 """
                 CREATE VECTOR INDEX sentence_embeddings IF NOT EXISTS
                 FOR (n:Sentence) ON n.embedding 
-                OPTIONS {indexConfig: {`vector.dimensions`: 384}}
+                OPTIONS {indexConfig: {`vector.dimensions`: 768}}
                 """
             )
 
