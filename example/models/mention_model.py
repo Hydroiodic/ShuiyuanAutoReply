@@ -69,7 +69,7 @@ class MentionModel(BaseMentionModel):
             return None
 
         # Let the Tongyi model respond based on conversation and similar responses
-        reply = await self.record_tongyi_model.get_pumpkin_response(raw, user)
+        reply = await self.mention_tongyi_model.get_pumpkin_response(raw, user)
         return MentionModel._make_unique_reply(reply)
 
     def _help_condition(self, raw: str) -> Optional[str]:
@@ -89,7 +89,7 @@ class MentionModel(BaseMentionModel):
             "2. 输入【帮助】，查看该帮助信息 :question:"
         )
 
-    async def _new_post_routine(self, mention: MentionNotificationDetails) -> None:
+    async def _new_mention_routine(self, mention: MentionNotificationDetails) -> None:
         """
         A routine to handle a new post in the topic.
         NOTE: no exception should be raised in this method.

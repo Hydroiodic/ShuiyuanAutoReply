@@ -84,6 +84,11 @@ class BaseMentionModel:
             # OK, let's difference the current stream with the new one
             new_stream = [mention.post_id for mention in mention_details]
 
+            # If the stream list is empty, we should initialize it
+            if not self.stream_list:
+                self.stream_list = new_stream
+                continue
+
             # Try to find the last known post in the new stream
             last_stream = None
             for post_id in reversed(new_stream):
