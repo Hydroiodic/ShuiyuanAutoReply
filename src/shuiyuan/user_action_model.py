@@ -108,7 +108,7 @@ class BaseUserActionModel:
                 routines = [
                     self._new_action_routine(mention) for mention in new_actions
                 ]
-                asyncio.gather(*routines)
+                await asyncio.gather(*routines, return_exceptions=True)
 
             # Update the stream list with the new stream
             self.stream_list = new_stream

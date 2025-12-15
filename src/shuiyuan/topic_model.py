@@ -110,7 +110,7 @@ class BaseTopicModel:
 
                 # OK, we have find the new posts, we should do some routine with them
                 routines = [self._new_post_routine(post_id) for post_id in new_posts]
-                asyncio.gather(*routines)
+                await asyncio.gather(*routines, return_exceptions=True)
 
             # Update the stream list with the new stream
             self.stream_list = new_stream

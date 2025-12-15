@@ -66,8 +66,8 @@ class MentionTongyiModel:
         """
         self.llm = ChatTongyi(
             model_name="qwen3-max",
-            temperature=0.7,
             dashscope_api_key=os.getenv("DASHSCOPE_API_KEY"),
+            temperature=0.7,
         )
         self.retriever = Neo4jVector.from_existing_graph(
             embedding=M3EEmbeddings(),
