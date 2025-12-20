@@ -99,9 +99,10 @@ class MentionTongyiModel:
         )
 
     def get_session_history(self, session_id: str) -> ChatMessageHistory:
-        if session_id not in self._histories:
-            self._histories[session_id] = ChatMessageHistory()
-        return self._histories[session_id]
+        return self._histories.setdefault(session_id, ChatMessageHistory())
+
+    def clear_session_history(self, session_id: str) -> None:
+        self._histories.pop(session_id, None)
 
     async def get_pumpkin_response(
         self, conversation: str, user: User

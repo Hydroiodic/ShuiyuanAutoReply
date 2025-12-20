@@ -75,7 +75,24 @@ class MentionModel(BaseUserActionModel):
 
         # Let the Tongyi model respond based on conversation and similar responses
         reply = await self.mention_tongyi_model.get_pumpkin_response(raw, user)
+        reply = f"{reply}\n\n（内容由AI生成，仅供参考）"
         return MentionModel._make_unique_reply(reply)
+
+    async def _clear_condition(self, raw: str, user: User) -> Optional[str]:
+        """
+        Check if the raw content of a post contains the string "【清除历史】".
+
+        :param raw: The raw content of the post.
+        :return: A string to reply to the post if the condition is met, otherwise None.
+        """
+        # If the raw content does not contain "清除历史", we return None
+        if "【清除历史】" not in raw:
+            return None
+
+        # Clear the session history for the user
+        self.mention_tongyi_model.clear_session_history(user.id)
+
+        return MentionModel._make_unique_reply("已清除与小南瓜的对话历史记录")
 
     def _help_condition(self, raw: str) -> Optional[str]:
         """
@@ -91,7 +108,8 @@ class MentionModel(BaseUserActionModel):
         return MentionModel._make_unique_reply(
             "帮助信息如下：\n"
             "1. 输入【小南瓜】+对话，与南瓜bot聊天 :jack_o_lantern:\n"
-            "2. 输入【帮助】，查看该帮助信息 :question:"
+            "2. 输入【清除历史】，清除与小南瓜的对话历史记录 :broom:\n"
+            "3. 输入【帮助】，查看该帮助信息 :question:"
         )
 
     async def _new_action_routine(self, action: UserActionDetails) -> None:
@@ -135,6 +153,11 @@ class MentionModel(BaseUserActionModel):
 
             # Check help condition
             text = self._help_condition(post_details.raw)
+            if text is not None:
+                return
+
+            # Check clear condition
+            text = await self._clear_condition(post_details.raw, post_user)
             if text is not None:
                 return
 

@@ -38,7 +38,7 @@ async def main():
         mention_model = MentionModel(model, "MonkeysPumpkin")
         tarot_topic_model = TarotTopicModel(model, 430919)
         # stock_topic_model = StockTopicModel(model, 392286)
-        record_topic_model = RecordTopicModel(model, 432560)
+        record_topic_model = RecordTopicModel(model, 441566)
 
         # stock_topic_model.add_time_routine(TimeInADay(hour=9, minute=30), True)
         # stock_topic_model.add_time_routine(TimeInADay(hour=11, minute=30), True)
