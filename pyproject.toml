@@ -1,0 +1,11 @@
+[project]
+name = "mcp-server"
+version = "0.1.0"
+description = "MCP Server for ShuiyuanAutoReply"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "docker>=7.1.0",
+    "dotenv>=0.9.9",
+    "mcp[cli]>=1.25.0",
+]
