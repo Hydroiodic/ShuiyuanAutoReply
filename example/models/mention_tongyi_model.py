@@ -1,8 +1,9 @@
 import os
 from contextlib import AsyncExitStack
-from mcp import ClientSession
-from mcp.client.sse import sse_client
+from mcp import ClientSession, Tool
+from mcp.client.streamable_http import streamable_http_client
 from typing import Optional, Dict, List
+from pydantic import BaseModel, create_model
 from langchain_core.tools import StructuredTool
 from langchain_core.embeddings import Embeddings
 from langchain_core.prompts import (
@@ -107,7 +108,46 @@ class MentionTongyiModel:
     def clear_session_history(self, session_id: str) -> None:
         self._histories.pop(session_id, None)
 
-    async def load_mcp_tools(session: ClientSession) -> List[StructuredTool]:
+    def _get_tool_schema_class(self, tool: Tool) -> BaseModel:
+        """
+        Build a Pydantic schema class from the MCP Tool inputSchema.
+        """
+        input_schema = getattr(tool, "inputSchema", None) or {}
+        properties = input_schema.get("properties", {}) or {}
+        required = input_schema.get("required", []) or []
+
+        fields = {}
+        for name, prop in properties.items():
+            json_type = prop.get("type")
+            py_type = str
+            if json_type == "integer":
+                py_type = int
+            elif json_type == "number":
+                py_type = float
+            elif json_type == "boolean":
+                py_type = bool
+            elif json_type == "array":
+                py_type = list
+            elif json_type == "object":
+                py_type = dict
+
+            default = ... if name in required else None
+            fields[name] = (py_type, default)
+
+        if fields:
+            ArgsModel = create_model(
+                f"MCPTool_{tool.name}_Args",
+                __base__=BaseModel,
+                **fields,
+            )
+        else:
+
+            class ArgsModel(BaseModel):
+                pass
+
+        return ArgsModel
+
+    async def _load_mcp_tools(self, session: ClientSession) -> List[StructuredTool]:
         """
         Load tools from MCP Server and convert them to LangChain StructuredTool.
         """
@@ -130,11 +170,8 @@ class MentionTongyiModel:
                 coroutine=_execution_wrapper,
                 name=tool.name,
                 description=tool.description,
-                args_schema=None,
+                args_schema=self._get_tool_schema_class(tool),
             )
-
-            # Set the args schema if available
-            lc_tool.args = tool.inputSchema.get("properties", {})
             langchain_tools.append(lc_tool)
 
         return langchain_tools
@@ -150,7 +187,7 @@ class MentionTongyiModel:
         try:
             # Create SSE Client
             streams = await self.exit_stack.enter_async_context(
-                sse_client(url=mcp_server_url)
+                streamable_http_client(url=mcp_server_url)
             )
 
             # Create session to read/write streams
@@ -213,4 +250,4 @@ class MentionTongyiModel:
             agent_input,
             config={"configurable": {"session_id": user.id}},
         )
-        return response
+        return response["output"]
