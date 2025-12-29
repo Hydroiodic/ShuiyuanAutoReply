@@ -6,6 +6,7 @@ dacite
 dashscope
 dotenv
 langchain-community
+mcp
 neomodel
 numpy
 openai

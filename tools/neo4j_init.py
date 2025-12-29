@@ -1,3 +1,4 @@
+import re
 import asyncio
 import dotenv
 import logging
@@ -30,6 +31,9 @@ async def init_database():
         # Initialize the Neo4j database
         await global_async_neo4j_manager.initialize()
 
+        # The signature has to be removed before storing the sentences
+        sig_re = r"<div data-signature>.*?</div>"
+
         # Try to open the CSV file and import data
         file_path = os.path.join(os.path.dirname(__file__), "user_archive.csv")
         if os.path.exists(file_path):
@@ -46,7 +50,10 @@ async def init_database():
                 if auto_reply_tag in str(raw):
                     continue
                 # For other posts, import them into the database
-                data_to_import.append(str(raw).strip())
+                # But signature needs to be removed from the post
+                data_to_import.append(
+                    re.sub(sig_re, "", str(raw), flags=re.DOTALL).strip()
+                )
             # Make every record unique
             data_to_import = list(set(data_to_import))
             # Log the number of records to be imported

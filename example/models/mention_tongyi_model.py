@@ -1,15 +1,18 @@
 import os
-from typing import Optional, Dict
+from contextlib import AsyncExitStack
+from mcp import ClientSession
+from mcp.client.sse import sse_client
+from typing import Optional, Dict, List
+from langchain_core.tools import StructuredTool
 from langchain_core.embeddings import Embeddings
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import (
     ChatPromptTemplate,
     SystemMessagePromptTemplate,
     HumanMessagePromptTemplate,
     MessagesPlaceholder,
 )
-from langchain_core.runnables import RunnablePassthrough
 from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_community.chat_models.tongyi import ChatTongyi
 from langchain_community.vectorstores.neo4j_vector import Neo4jVector
@@ -40,11 +43,14 @@ class MentionTongyiModel:
         """
         Initialize the Tongyi Qianwen model and Neo4j vector store.
         """
+        # Define the ChatTongyi model
         self.llm = ChatTongyi(
             model_name="qwen3-235b-a22b-instruct-2507",
             dashscope_api_key=os.getenv("DASHSCOPE_API_KEY"),
             model_kwargs={"temperature": 1.5},
         )
+
+        # Define the Neo4j vector store retriever
         self.retriever = Neo4jVector.from_existing_graph(
             embedding=M3EEmbeddings(),
             url=os.environ["NEO4J_DB_URL"],
@@ -55,6 +61,8 @@ class MentionTongyiModel:
             text_node_properties=["text"],
             embedding_node_property="embedding",
         ).as_retriever(search_kwargs={"k": 20})
+
+        # Define the prompt template
         self.prompt = ChatPromptTemplate.from_messages(
             [
                 SystemMessagePromptTemplate.from_template(
@@ -81,22 +89,17 @@ class MentionTongyiModel:
                 HumanMessagePromptTemplate.from_template(
                     "用户{username}(其昵称是{name})：\n{question}\n\n"
                 ),
+                MessagesPlaceholder(variable_name="agent_scratchpad"),
             ]
         )
+
+        # Initialize message histories
         self._histories: Dict[str, ChatMessageHistory] = {}
-        self.rag_chain = RunnableWithMessageHistory(
-            (
-                RunnablePassthrough.assign(
-                    context=lambda x: self.retriever.invoke(x["question"]),
-                )
-                | self.prompt
-                | self.llm
-                | StrOutputParser()
-            ),
-            self.get_session_history,
-            input_messages_key="question",
-            history_messages_key="chat_history",
-        )
+
+        # MCP Context Management
+        self.exit_stack = AsyncExitStack()
+        self.session: Optional[ClientSession] = None
+        self.agent_executor: Optional[AgentExecutor] = None
 
     def get_session_history(self, session_id: str) -> ChatMessageHistory:
         return self._histories.setdefault(session_id, ChatMessageHistory())
@@ -104,21 +107,110 @@ class MentionTongyiModel:
     def clear_session_history(self, session_id: str) -> None:
         self._histories.pop(session_id, None)
 
+    async def load_mcp_tools(session: ClientSession) -> List[StructuredTool]:
+        """
+        Load tools from MCP Server and convert them to LangChain StructuredTool.
+        """
+        # Get the list of tools from MCP Server
+        mcp_tools = await session.list_tools()
+        langchain_tools = []
+
+        for tool in mcp_tools.tools:
+            # Define an async execution function to actually call MCP Server
+            async def _execution_wrapper(**kwargs):
+                # Call the tool on MCP Server
+                result = await session.call_tool(tool.name, arguments=kwargs)
+                # Return the text content
+                return result.content[0].text
+
+            # Create a LangChain StructuredTool
+            # Note: We set func=None and provide coroutine to enforce async usage
+            lc_tool = StructuredTool.from_function(
+                func=None,
+                coroutine=_execution_wrapper,
+                name=tool.name,
+                description=tool.description,
+                args_schema=None,
+            )
+
+            # Set the args schema if available
+            lc_tool.args = tool.inputSchema.get("properties", {})
+            langchain_tools.append(lc_tool)
+
+        return langchain_tools
+
+    async def initialize_mcp(self):
+        """
+        Use HTTP to connect to MCP Server and initialize the AgentExecutor with tools.
+        NOTE: This function should be called once during startup.
+        """
+        # Get MCP Server URL from environment or use default
+        mcp_server_url = os.getenv("MCP_SERVER_URL", "http://localhost:8000/mcp")
+
+        try:
+            # Create SSE Client
+            streams = await self.exit_stack.enter_async_context(
+                sse_client(url=mcp_server_url)
+            )
+
+            # Create session to read/write streams
+            self.session = await self.exit_stack.enter_async_context(
+                ClientSession(streams[0], streams[1])
+            )
+
+            # Initialize the session
+            await self.session.initialize()
+
+            # Load tools from MCP Server
+            mcp_tools = await self._load_mcp_tools(self.session)
+            print(f"MCP Tools Loaded via HTTP: {[t.name for t in mcp_tools]}")
+
+            # Create the Tool Calling Agent
+            agent = create_tool_calling_agent(self.llm, mcp_tools, self.prompt)
+
+            self.agent_executor = AgentExecutor(
+                agent=agent,
+                tools=mcp_tools,
+                verbose=True,
+                handle_parsing_errors=True,
+            )
+
+        except Exception as e:
+            print(f"Failed to connect to MCP Server at {mcp_server_url}: {e}")
+            self.agent_executor = None
+
     async def get_pumpkin_response(
         self, conversation: str, user: User
     ) -> Optional[str]:
         """
         Let the model respond based on conversation and similar responses.
         """
+        # Initialize MCP connection if not already done
+        if not self.agent_executor:
+            await self.initialize_mcp()
+
+        # Retrieve similar documents from Neo4j
+        docs = await self.retriever.ainvoke(conversation)
+        context_text = "\n".join([doc.page_content for doc in docs])
+
         # Arrange the input of LangChain
-        chain_input = {
+        agent_input = {
             "username": user.username,
             "name": user.name or "",
             "question": conversation,
+            "context": context_text,
         }
 
-        response = await self.rag_chain.ainvoke(
-            chain_input,
+        # Create RunnableWithMessageHistory
+        agent_with_history = RunnableWithMessageHistory(
+            self.agent_executor,
+            self.get_session_history,
+            input_messages_key="question",
+            history_messages_key="chat_history",
+        )
+
+        response = await agent_with_history.ainvoke(
+            agent_input,
             config={"configurable": {"session_id": user.id}},
         )
         return response
