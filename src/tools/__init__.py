@@ -2,5 +2,5 @@
 
 import os
 
-if eval(os.getenv("PYTHON_TOOL_ENABLED", "False")):
-    from . import python_tool
+if eval(os.getenv("COMMAND_TOOL_ENABLED", "False")):
+    from . import command_tool
