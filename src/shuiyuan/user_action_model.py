@@ -92,23 +92,18 @@ class BaseUserActionModel:
                 continue
 
             # Try to find the last known post in the new stream
-            last_stream = None
-            for post_id in reversed(new_stream):
-                if post_id not in self.stream_list:
-                    last_stream = post_id
+            last_post_index = len(new_stream)
+            for i, post_id in enumerate(new_stream):
+                if post_id in self.stream_list:
+                    last_post_index = i
                     break
 
-            # If we found the last known post, slice the new stream
-            if last_stream is not None:
-                # Slice the new stream to get only the new posts
-                last_index = new_stream.index(last_stream) + 1
-                new_actions = action_details[:last_index]
+            # Slice the new stream to get only the new posts
+            new_actions = action_details[:last_post_index]
 
-                # OK, we have find the new posts, we should do some routine with them
-                routines = [
-                    self._new_action_routine(mention) for mention in new_actions
-                ]
-                await asyncio.gather(*routines, return_exceptions=True)
+            # OK, we have find the new posts, we should do some routine with them
+            routines = [self._new_action_routine(mention) for mention in new_actions]
+            await asyncio.gather(*routines, return_exceptions=True)
 
             # Update the stream list with the new stream
             self.stream_list = new_stream
