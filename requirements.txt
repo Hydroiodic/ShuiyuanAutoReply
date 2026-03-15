@@ -5,7 +5,9 @@ asyncio
 dacite
 dashscope
 dotenv
+httpx[socks]
 langchain-community
+langchain-google-genai
 mcp
 neomodel
 numpy

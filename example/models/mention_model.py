@@ -6,7 +6,7 @@ from src.shuiyuan.objects import User, UserActionDetails
 from src.shuiyuan.shuiyuan_model import ShuiyuanModel
 from src.shuiyuan.user_action_model import BaseUserActionModel
 from src.constants import auto_reply_tag
-from .mention_tongyi_model import MentionTongyiModel
+from .mention_google_model import MentionGeminiModel
 
 
 class MentionModel(BaseUserActionModel):
@@ -22,7 +22,7 @@ class MentionModel(BaseUserActionModel):
         :param username: The username of the robot account.
         """
         super().__init__(model, username, [5, 7])
-        self.mention_tongyi_model = MentionTongyiModel()
+        self.mention_google_model = MentionGeminiModel()
 
     @staticmethod
     def _remove_shuiyuan_signature(text: str) -> str:
@@ -73,8 +73,8 @@ class MentionModel(BaseUserActionModel):
         if raw is None:
             return None
 
-        # Let the Tongyi model respond based on conversation and similar responses
-        reply = await self.mention_tongyi_model.get_pumpkin_response(raw, user)
+        # Let the Gemini model respond based on conversation and similar responses
+        reply = await self.mention_google_model.get_pumpkin_response(raw, user)
         reply = f"{reply}\n\n（内容由AI生成，仅供参考）"
         return MentionModel._make_unique_reply(reply)
 
@@ -90,7 +90,7 @@ class MentionModel(BaseUserActionModel):
             return None
 
         # Clear the session history for the user
-        self.mention_tongyi_model.clear_session_history(user.id)
+        self.mention_google_model.clear_session_history(user.id)
 
         return MentionModel._make_unique_reply("已清除与小南瓜的对话历史记录")
 

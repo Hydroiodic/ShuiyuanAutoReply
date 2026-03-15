@@ -13,17 +13,19 @@ from langchain_core.prompts import (
     HumanMessagePromptTemplate,
     MessagesPlaceholder,
 )
-from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 from langchain_community.chat_message_histories import ChatMessageHistory
-from langchain_community.chat_models.tongyi import ChatTongyi
+from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
+from langchain_google_genai import (
+    ChatGoogleGenerativeAI,
+    HarmBlockThreshold,
+    HarmCategory,
+)
 from langchain_community.vectorstores.neo4j_vector import Neo4jVector
 from sentence_transformers import SentenceTransformer
 from src.shuiyuan.objects import User
 
 
 class M3EEmbeddings(Embeddings):
-
     def __init__(self, model_name="moka-ai/m3e-base"):
         self.model = SentenceTransformer(model_name)
 
@@ -36,27 +38,27 @@ class M3EEmbeddings(Embeddings):
         return embedding.tolist()
 
 
-class MentionTongyiModel:
+class MentionGeminiModel:
     """
-    A model for managing Tongyi Qianwen data.
+    A model for managing Google Gemini data with Manual History Management.
     """
 
     def __init__(self):
-        """
-        Initialize the Tongyi Qianwen model and Neo4j vector store.
-        """
-        # Define the ChatTongyi model
-        self.llm = ChatTongyi(
-            model_name="qwen-plus-2025-12-01",
-            dashscope_api_key=os.getenv("DASHSCOPE_API_KEY"),
-            model_kwargs={
-                "temperature": 1.5,
-                "enable_thinking": True,
-                "incremental_output": True,
+        self.llm = ChatGoogleGenerativeAI(
+            model="gemini-3.1-pro-preview",
+            temperature=1.5,
+            safety_settings={
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
             },
+            convert_system_message_to_human=False,
+            client_args={"proxy": "socks5://127.0.0.1:7890"},
+            max_output_tokens=4096,
+            thinking_budget=2048,
         )
 
-        # Define the Neo4j vector store retriever
         self.retriever = Neo4jVector.from_existing_graph(
             embedding=M3EEmbeddings(),
             url=os.environ["NEO4J_DB_URL"],
@@ -68,7 +70,6 @@ class MentionTongyiModel:
             embedding_node_property="embedding",
         ).as_retriever(search_kwargs={"k": 20})
 
-        # Define the prompt template
         self.prompt = ChatPromptTemplate.from_messages(
             [
                 SystemMessagePromptTemplate.from_template(
@@ -100,11 +101,7 @@ class MentionTongyiModel:
                 MessagesPlaceholder(variable_name="agent_scratchpad"),
             ]
         )
-
-        # Initialize message histories
         self._histories: Dict[str, ChatMessageHistory] = {}
-
-        # MCP Context Management
         self.exit_stack = AsyncExitStack()
         self.session: Optional[ClientSession] = None
         self.agent_executor: Optional[AgentExecutor] = None
@@ -116,9 +113,6 @@ class MentionTongyiModel:
         self._histories.pop(session_id, None)
 
     def _get_tool_schema_class(self, tool: Tool) -> BaseModel:
-        """
-        Build a Pydantic schema class from the MCP Tool inputSchema.
-        """
         input_schema = getattr(tool, "inputSchema", None) or {}
         properties = input_schema.get("properties", {}) or {}
         required = input_schema.get("required", []) or []
@@ -155,15 +149,11 @@ class MentionTongyiModel:
         return ArgsModel
 
     async def _load_mcp_tools(self, session: ClientSession) -> List[StructuredTool]:
-        """
-        Load tools from MCP Server and convert them to LangChain StructuredTool.
-        """
-        # Get the list of tools from MCP Server
         mcp_tools = await session.list_tools()
         langchain_tools = []
 
         for tool in mcp_tools.tools:
-            # Factory to bind the current tool name and avoid late-binding closure bugs
+
             def make_execution_wrapper(tool_name: str):
                 async def _execution_wrapper(**kwargs):
                     # Call the tool on MCP Server using the bound name
@@ -173,8 +163,6 @@ class MentionTongyiModel:
 
                 return _execution_wrapper
 
-            # Create a LangChain StructuredTool
-            # Note: We set func=None and provide coroutine to enforce async usage
             lc_tool = StructuredTool.from_function(
                 func=None,
                 coroutine=make_execution_wrapper(tool.name),
@@ -187,77 +175,66 @@ class MentionTongyiModel:
         return langchain_tools
 
     async def initialize_mcp(self):
-        """
-        Use HTTP to connect to MCP Server and initialize the AgentExecutor with tools.
-        NOTE: This function should be called once during startup.
-        """
-        # Get MCP Server URL from environment or use default
         mcp_server_url = os.getenv("MCP_SERVER_URL", "http://localhost:8000/mcp")
-
         try:
-            # Create SSE Client
             streams = await self.exit_stack.enter_async_context(
                 streamable_http_client(url=mcp_server_url)
             )
-
-            # Create session to read/write streams
             self.session = await self.exit_stack.enter_async_context(
                 ClientSession(streams[0], streams[1])
             )
-
-            # Initialize the session
             await self.session.initialize()
 
-            # Load tools from MCP Server
             mcp_tools = await self._load_mcp_tools(self.session)
             logging.info(f"MCP Tools Loaded via HTTP: {[t.name for t in mcp_tools]}")
 
-            # Create the Tool Calling Agent
             agent = create_tool_calling_agent(self.llm, mcp_tools, self.prompt)
-
             self.agent_executor = AgentExecutor(
                 agent=agent,
                 tools=mcp_tools,
                 verbose=True,
                 handle_parsing_errors=True,
             )
-
         except Exception as e:
             logging.error(f"Failed to connect to MCP Server at {mcp_server_url}: {e}")
             self.agent_executor = None
 
+    def _parse_gemini_output(self, raw_output: List[Dict | str]) -> str:
+        res = ""
+        for item in raw_output:
+            if isinstance(item, dict) and "text" in item:
+                res += item["text"]
+            if hasattr(item, "text"):
+                res += item.text
+            if isinstance(item, str):
+                res += item
+        return res.strip()
+
     async def get_pumpkin_response(
         self, conversation: str, user: User
     ) -> Optional[str]:
-        """
-        Let the model respond based on conversation and similar responses.
-        """
-        # Initialize MCP connection if not already done
         if not self.agent_executor:
             await self.initialize_mcp()
 
-        # Retrieve similar documents from Neo4j
         docs = await self.retriever.ainvoke(conversation)
         context_text = "\n".join([doc.page_content for doc in docs])
 
-        # Arrange the input of LangChain
+        history_obj = self.get_session_history(user.id)
+        current_history_messages = history_obj.messages
+
         agent_input = {
             "username": user.username,
             "name": user.name or "",
             "question": conversation,
             "context": context_text,
+            "chat_history": current_history_messages,
         }
 
-        # Create RunnableWithMessageHistory
-        agent_with_history = RunnableWithMessageHistory(
-            self.agent_executor,
-            self.get_session_history,
-            input_messages_key="question",
-            history_messages_key="chat_history",
-        )
+        response = await self.agent_executor.ainvoke(agent_input)
+        raw_output = response.get("output")
+        final_clean_text = self._parse_gemini_output(raw_output)
 
-        response = await agent_with_history.ainvoke(
-            agent_input,
-            config={"configurable": {"session_id": user.id}},
-        )
-        return response["output"]
+        history_obj.add_user_message(conversation)
+        history_obj.add_ai_message(final_clean_text)
+
+        return final_clean_text

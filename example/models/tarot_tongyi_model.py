@@ -30,7 +30,7 @@ class TarotTongyiModel(BaseTongyiModel):
 
         # Create a chat completion request with the tarot results and question
         response = await self.client.chat.completions.create(
-            model="deepseek-v3.1",
+            model="deepseek-v3.2",
             extra_body={
                 "enable_thinking": False,
             },
