@@ -55,10 +55,13 @@ class MentionModel(BaseUserActionModel):
         raw = MentionModel._remove_shuiyuan_signature(raw.replace(prompt, "")).strip()
         return raw
 
-    async def _pumpkin_condition(self, raw: str, user: User) -> Optional[str]:
+    async def _pumpkin_condition(
+        self, topic_id: int, raw: str, user: User
+    ) -> Optional[str]:
         """
         Check if the raw content of a post contains the string "【小南瓜】".
 
+        :param topic_id: The ID of the topic where the post is located.
         :param raw: The raw content of the post.
         :param user: The user who posted the message.
         :return: A string to reply to the post if the condition is met, otherwise None.
@@ -74,7 +77,9 @@ class MentionModel(BaseUserActionModel):
             return None
 
         # Let the Gemini model respond based on conversation and similar responses
-        reply = await self.mention_google_model.get_pumpkin_response(raw, user)
+        reply = await self.mention_google_model.get_pumpkin_response(
+            topic_id, raw, user
+        )
         reply = f"{reply}\n\n（内容由AI生成，仅供参考）"
         return MentionModel._make_unique_reply(reply)
 
@@ -162,7 +167,11 @@ class MentionModel(BaseUserActionModel):
                 return
 
             # Check pumpkin condition
-            text = await self._pumpkin_condition(post_details.raw, post_user)
+            text = await self._pumpkin_condition(
+                post_details.topic_id,
+                post_details.raw,
+                post_user,
+            )
             if text is not None:
                 return
 

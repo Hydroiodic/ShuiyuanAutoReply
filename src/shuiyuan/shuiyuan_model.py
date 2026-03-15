@@ -462,7 +462,7 @@ class ShuiyuanModel:
         """
         Search for users by a search term.
 
-        :param term: The search term to use for finding users.
+        :param term: The search term to use for finding users. It has to be NON-EMPTY.
         :return: A list of User instances matching the search term.
         """
         response = await self._rate_limited_request(
@@ -475,21 +475,27 @@ class ShuiyuanModel:
         user_list = data.get("users", [])
         return [from_dict(User, user) for user in user_list]
 
-    async def search_post_by_optional_username(
-        self, term: str, username: Optional[str] = None
+    async def search_post_by_optional_username_topic(
+        self, term: str, username: Optional[str] = None, topic_id: Optional[int] = None
     ) -> List[PostSearchResult]:
         """
         Search for posts by a search term and an optional username.
 
-        :param term: The search term to use for finding posts.
+        :param term: The search term to use for finding posts. It has to be NON-EMPTY.
         :param username: An optional username to filter posts by.
+        :param topic_id: An optional topic ID to filter posts by.
         :return: A list of PostSearchResult instances matching the search criteria.
         """
+        # Construct the params
+        params = {"term": term}
         if username:
-            term += f" @${username}"
+            params["term"] += f" @{username}"
+        if topic_id:
+            params["search_context[type]"] = "topic"
+            params["search_context[id]"] = str(topic_id)
 
         response = await self._rate_limited_request(
-            "get", f"{post_search_url}", params={"term": term}
+            "get", f"{post_search_url}", params=params
         )
         if response.status != 200:
             raise Exception(f"Failed to search posts: {await response.text()}")
@@ -498,18 +504,19 @@ class ShuiyuanModel:
         post_list = data.get("posts", [])
         return [from_dict(PostSearchResult, post) for post in post_list]
 
-    async def search_post_details_by_optional_username(
-        self, term: str, username: Optional[str] = None
+    async def search_post_details_by_optional_username_topic(
+        self, term: str, username: Optional[str] = None, topic_id: Optional[int] = None
     ) -> List[PostDetails]:
         """
         Search for posts by a search term and an optional username, and return detailed information.
 
-        :param term: The search term to use for finding posts.
+        :param term: The search term to use for finding posts. It has to be NON-EMPTY.
         :param username: An optional username to filter posts by.
+        :param topic_id: An optional topic ID to filter posts by.
         :return: A list of PostDetails instances matching the search criteria.
         """
-        post_search_results = await self.search_post_by_optional_username(
-            term, username
+        post_search_results = await self.search_post_by_optional_username_topic(
+            term, username, topic_id
         )
         post_details_list = []
         for result in post_search_results:
@@ -523,17 +530,25 @@ class ShuiyuanModel:
                 )
         return post_details_list
 
-    async def query_recent_posts_by_topic_id(self, topic_id: int) -> List[PostDetails]:
+    async def query_recent_posts_by_topic_id(
+        self, topic_id: int, limit: int
+    ) -> List[PostDetails]:
         """
         Query recent posts in a topic by its ID.
 
         :param topic_id: The ID of the topic to query.
+        :param limit: The maximum number of recent posts to retrieve.
         :return: A list of PostDetails instances for the recent posts in the topic.
         """
+        # Check if `limit` is positive
+        if limit <= 0:
+            raise ValueError("Limit must be a positive integer")
+
+        # Retrieve the topic details to get the post stream
         topic_details = await self.get_topic_details(topic_id)
 
-        # Use the last 20 posts for recent activity
-        recent_posts = topic_details.post_stream.stream[-20:]
+        # Use the last `limit` posts for recent activity
+        recent_posts = topic_details.post_stream.stream[-limit:]
         return await self.get_post_details_batch_by_topic_id(topic_id, recent_posts)
 
 
