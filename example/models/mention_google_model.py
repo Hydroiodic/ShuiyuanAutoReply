@@ -1,5 +1,6 @@
 import os
 import logging
+import inspect
 from contextlib import AsyncExitStack
 from mcp import ClientSession, Tool
 from mcp.client.streamable_http import streamable_http_client
@@ -23,6 +24,7 @@ from langchain_google_genai import (
 from langchain_community.vectorstores.neo4j_vector import Neo4jVector
 from sentence_transformers import SentenceTransformer
 from src.shuiyuan.objects import User
+from src.shuiyuan.shuiyuan_model import ShuiyuanModel
 
 
 class M3EEmbeddings(Embeddings):
@@ -43,15 +45,15 @@ class MentionGeminiModel:
     A model for managing Google Gemini data with Manual History Management.
     """
 
-    def __init__(self):
+    def __init__(self, model: ShuiyuanModel):
         self.llm = ChatGoogleGenerativeAI(
             model="gemini-3.1-pro-preview",
             temperature=1.5,
             safety_settings={
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+                # HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+                # HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+                # HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+                # HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
             },
             convert_system_message_to_human=False,
             client_args={"proxy": "socks5://127.0.0.1:7890"},
@@ -105,6 +107,7 @@ class MentionGeminiModel:
         self.exit_stack = AsyncExitStack()
         self.session: Optional[ClientSession] = None
         self.agent_executor: Optional[AgentExecutor] = None
+        self.model = model
 
     def get_session_history(self, session_id: str) -> ChatMessageHistory:
         return self._histories.setdefault(session_id, ChatMessageHistory())
@@ -174,30 +177,72 @@ class MentionGeminiModel:
 
         return langchain_tools
 
-    async def initialize_mcp(self):
-        mcp_server_url = os.getenv("MCP_SERVER_URL", "http://localhost:8000/mcp")
-        try:
-            streams = await self.exit_stack.enter_async_context(
-                streamable_http_client(url=mcp_server_url)
-            )
-            self.session = await self.exit_stack.enter_async_context(
-                ClientSession(streams[0], streams[1])
-            )
-            await self.session.initialize()
+    def _load_shuiyuan_tools(self) -> List[StructuredTool]:
+        # These async functions will be used as tools
+        function_list = [
+            "search_user_by_term",
+            "search_post_details_by_optional_username",
+        ]
 
-            mcp_tools = await self._load_mcp_tools(self.session)
-            logging.info(f"MCP Tools Loaded via HTTP: {[t.name for t in mcp_tools]}")
+        # Dynamically create tool wrappers for the above functions
+        tools = []
+        for func_name in function_list:
+            func = getattr(self.model, func_name)
+            if callable(func):
+                tools.append(
+                    StructuredTool.from_function(
+                        coroutine=func,
+                        name=func_name,
+                        description=inspect.getdoc(func)
+                        or f"Tool for calling {func_name}",
+                    )
+                )
 
-            agent = create_tool_calling_agent(self.llm, mcp_tools, self.prompt)
-            self.agent_executor = AgentExecutor(
-                agent=agent,
-                tools=mcp_tools,
-                verbose=True,
-                handle_parsing_errors=True,
-            )
-        except Exception as e:
-            logging.error(f"Failed to connect to MCP Server at {mcp_server_url}: {e}")
-            self.agent_executor = None
+        return tools
+
+    async def initialize_agent(self):
+        # MCP tools added here
+        mcp_tools = []
+        mcp_server_url = os.getenv("MCP_SERVER_URL")
+
+        if mcp_server_url:
+            # Create MCP streams and session, then load tools from it
+            try:
+                streams = await self.exit_stack.enter_async_context(
+                    streamable_http_client(url=mcp_server_url)
+                )
+                self.session = await self.exit_stack.enter_async_context(
+                    ClientSession(streams[0], streams[1])
+                )
+                await self.session.initialize()
+
+                mcp_tools = await self._load_mcp_tools(self.session)
+                logging.info(
+                    f"MCP Tools Loaded via HTTP: {[t.name for t in mcp_tools]}"
+                )
+
+            except Exception as e:
+                logging.error(
+                    f"Failed to connect to MCP Server at {mcp_server_url}: {e}"
+                )
+                self.agent_executor = None
+                self.session = None
+
+        # Shuiyuan-specific tools added here
+        shuiyuan_tools = self._load_shuiyuan_tools()
+
+        # Create the agent with both MCP tools and Shuiyuan tools
+        agent = create_tool_calling_agent(
+            self.llm,
+            mcp_tools + shuiyuan_tools,
+            self.prompt,
+        )
+        self.agent_executor = AgentExecutor(
+            agent=agent,
+            tools=mcp_tools + shuiyuan_tools,
+            verbose=True,
+            handle_parsing_errors=True,
+        )
 
     def _parse_gemini_output(self, raw_output: List[Dict | str]) -> str:
         res = ""
@@ -214,7 +259,7 @@ class MentionGeminiModel:
         self, conversation: str, user: User
     ) -> Optional[str]:
         if not self.agent_executor:
-            await self.initialize_mcp()
+            await self.initialize_agent()
 
         docs = await self.retriever.ainvoke(conversation)
         context_text = "\n".join([doc.page_content for doc in docs])
@@ -229,9 +274,25 @@ class MentionGeminiModel:
             "context": context_text,
             "chat_history": current_history_messages,
         }
+        # Prefer using tools via MCP when available; otherwise fall back to plain LLM
+        if self.agent_executor is not None:
+            response = await self.agent_executor.ainvoke(agent_input)
+            raw_output = response.get("output")
+        else:
+            logging.warning(
+                "MCP Server is not available, "
+                "falling back to direct LLM without tools."
+            )
+            # For direct LLM call, we still reuse the same prompt, but with
+            # an empty agent_scratchpad since no tools are being invoked.
+            prompt_input = {
+                **agent_input,
+                "agent_scratchpad": [],
+            }
+            chain = self.prompt | self.llm
+            response = await chain.ainvoke(prompt_input)
+            raw_output = response.content
 
-        response = await self.agent_executor.ainvoke(agent_input)
-        raw_output = response.get("output")
         final_clean_text = self._parse_gemini_output(raw_output)
 
         history_obj.add_user_message(conversation)

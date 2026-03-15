@@ -22,7 +22,7 @@ class MentionModel(BaseUserActionModel):
         :param username: The username of the robot account.
         """
         super().__init__(model, username, [5, 7])
-        self.mention_google_model = MentionGeminiModel()
+        self.mention_google_model = MentionGeminiModel(model)
 
     @staticmethod
     def _remove_shuiyuan_signature(text: str) -> str:

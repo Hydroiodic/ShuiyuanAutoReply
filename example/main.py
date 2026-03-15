@@ -36,7 +36,7 @@ async def main():
     async with await ShuiyuanModel.create() as model:
         # Let's try to get the post streams
         mention_model = MentionModel(model, "MonkeysPumpkin")
-        tarot_topic_model = TarotTopicModel(model, 430919)
+        tarot_topic_model = TarotTopicModel(model, 456849)
         # stock_topic_model = StockTopicModel(model, 392286)
         record_topic_model = RecordTopicModel(model, 441566)
 

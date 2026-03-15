@@ -257,6 +257,26 @@ class ShuiyuanModel:
         data = await response.json()
         return from_dict(PostDetails, data)
 
+    async def get_post_details_batch_by_topic_id(
+        self, topic_id: int, post_ids: List[int]
+    ) -> List[PostDetails]:
+        """
+        Get the details of all posts in a topic by its ID.
+
+        :param topic_id: The ID of the topic to retrieve posts from.
+        :param post_ids: A list of post IDs to retrieve details for.
+        :return: A list of PostDetails instances containing the post information.
+        """
+        response = await self._rate_limited_request(
+            "get",
+            f"{get_topic_url}/{topic_id}/posts.json",
+            params={"post_ids[]": post_ids},
+        )
+        data = await response.json()
+        post_stream = data.get("post_stream", {})
+        posts = post_stream.get("posts", [])
+        return [from_dict(PostDetails, post_data) for post_data in posts]
+
     async def get_actions(self, username: str, filter: List[int]) -> UserActions:
         """
         Get the latest actions for a given username and filter.
@@ -267,7 +287,12 @@ class ShuiyuanModel:
         """
         response = await self._rate_limited_request(
             "get",
-            f"{action_url}?offset=0&username={username}&filter={",".join(map(str, filter))}",
+            f"{action_url}",
+            params={
+                "offset": 0,
+                "username": username,
+                "filter": ",".join(map(str, filter)),
+            },
         )
         if response.status != 200:
             raise Exception(f"Failed to get at notifications: {await response.text()}")
@@ -420,7 +445,7 @@ class ShuiyuanModel:
     @classmethod
     async def _close_shared_session(cls) -> None:
         # Lock to ensure no re-creation during closing
-        with cls._session_init_lock:
+        async with cls._session_init_lock:
             if cls._shared_session and not cls._shared_session.closed:
                 await cls._shared_session.close()
 
@@ -428,6 +453,88 @@ class ShuiyuanModel:
         cls._shared_session = None
         cls._request_chain = None
         cls._last_request_ts = 0.0
+
+    #################################################
+    ##             Query Methods Start             ##
+    #################################################
+
+    async def search_user_by_term(self, term: str) -> List[User]:
+        """
+        Search for users by a search term.
+
+        :param term: The search term to use for finding users.
+        :return: A list of User instances matching the search term.
+        """
+        response = await self._rate_limited_request(
+            "get", f"{user_search_url}", params={"term": term, "limit": 6}
+        )
+        if response.status != 200:
+            raise Exception(f"Failed to search users: {await response.text()}")
+
+        data = await response.json()
+        user_list = data.get("users", [])
+        return [from_dict(User, user) for user in user_list]
+
+    async def search_post_by_optional_username(
+        self, term: str, username: Optional[str] = None
+    ) -> List[PostSearchResult]:
+        """
+        Search for posts by a search term and an optional username.
+
+        :param term: The search term to use for finding posts.
+        :param username: An optional username to filter posts by.
+        :return: A list of PostSearchResult instances matching the search criteria.
+        """
+        if username:
+            term += f" @${username}"
+
+        response = await self._rate_limited_request(
+            "get", f"{post_search_url}", params={"term": term}
+        )
+        if response.status != 200:
+            raise Exception(f"Failed to search posts: {await response.text()}")
+
+        data = await response.json()
+        post_list = data.get("posts", [])
+        return [from_dict(PostSearchResult, post) for post in post_list]
+
+    async def search_post_details_by_optional_username(
+        self, term: str, username: Optional[str] = None
+    ) -> List[PostDetails]:
+        """
+        Search for posts by a search term and an optional username, and return detailed information.
+
+        :param term: The search term to use for finding posts.
+        :param username: An optional username to filter posts by.
+        :return: A list of PostDetails instances matching the search criteria.
+        """
+        post_search_results = await self.search_post_by_optional_username(
+            term, username
+        )
+        post_details_list = []
+        for result in post_search_results:
+            try:
+                details = await self.get_post_details(result.id)
+                post_details_list.append(details)
+            except Exception as e:
+                logging.error(
+                    f"Failed to get details for post ID {result.id}, "
+                    f"traceback is as follows:\n{traceback.format_exc()}"
+                )
+        return post_details_list
+
+    async def query_recent_posts_by_topic_id(self, topic_id: int) -> List[PostDetails]:
+        """
+        Query recent posts in a topic by its ID.
+
+        :param topic_id: The ID of the topic to query.
+        :return: A list of PostDetails instances for the recent posts in the topic.
+        """
+        topic_details = await self.get_topic_details(topic_id)
+
+        # Use the last 20 posts for recent activity
+        recent_posts = topic_details.post_stream.stream[-20:]
+        return await self.get_post_details_batch_by_topic_id(topic_id, recent_posts)
 
 
 def _global_ignore_illegal_cookies() -> None:

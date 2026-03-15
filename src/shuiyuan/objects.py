@@ -14,6 +14,22 @@ class User:
 
 
 @dataclass
+class PostSearchResult:
+    """
+    Represents a search result for a post.
+    """
+
+    id: int
+    name: Optional[str]
+    username: str
+    created_at: str
+    like_count: int
+    blurb: str
+    post_number: int
+    topic_id: int
+
+
+@dataclass
 class PostDetails:
     """
     Represents the details of a post in a topic.
