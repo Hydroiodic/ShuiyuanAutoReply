@@ -152,11 +152,15 @@ class MentionGeminiModel:
         return ArgsModel
 
     async def _load_mcp_tools(self, session: ClientSession) -> List[StructuredTool]:
+        """
+        Load tools from MCP Server and convert them to LangChain StructuredTool.
+        """
+        # Get the list of tools from MCP Server
         mcp_tools = await session.list_tools()
         langchain_tools = []
 
         for tool in mcp_tools.tools:
-
+            # Factory to bind the current tool name and avoid late-binding closure bugs
             def make_execution_wrapper(tool_name: str):
                 async def _execution_wrapper(**kwargs):
                     # Call the tool on MCP Server using the bound name
@@ -166,6 +170,8 @@ class MentionGeminiModel:
 
                 return _execution_wrapper
 
+            # Create a LangChain StructuredTool
+            # Note: We set func=None and provide coroutine to enforce async usage
             lc_tool = StructuredTool.from_function(
                 func=None,
                 coroutine=make_execution_wrapper(tool.name),
@@ -258,6 +264,7 @@ class MentionGeminiModel:
     async def get_pumpkin_response(
         self, conversation: str, user: User
     ) -> Optional[str]:
+        # Initialize agent for the first time
         if not self.agent_executor:
             await self.initialize_agent()
 
@@ -274,27 +281,13 @@ class MentionGeminiModel:
             "context": context_text,
             "chat_history": current_history_messages,
         }
-        # Prefer using tools via MCP when available; otherwise fall back to plain LLM
-        if self.agent_executor is not None:
-            response = await self.agent_executor.ainvoke(agent_input)
-            raw_output = response.get("output")
-        else:
-            logging.warning(
-                "MCP Server is not available, "
-                "falling back to direct LLM without tools."
-            )
-            # For direct LLM call, we still reuse the same prompt, but with
-            # an empty agent_scratchpad since no tools are being invoked.
-            prompt_input = {
-                **agent_input,
-                "agent_scratchpad": [],
-            }
-            chain = self.prompt | self.llm
-            response = await chain.ainvoke(prompt_input)
-            raw_output = response.content
 
+        # Here we assume that agent_executor must not be None
+        response = await self.agent_executor.ainvoke(agent_input)
+        raw_output = response.get("output")
         final_clean_text = self._parse_gemini_output(raw_output)
 
+        # Append history for the session
         history_obj.add_user_message(conversation)
         history_obj.add_ai_message(final_clean_text)
 

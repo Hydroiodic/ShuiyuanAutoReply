@@ -1,5 +1,6 @@
 import os
 import logging
+import inspect
 from contextlib import AsyncExitStack
 from mcp import ClientSession, Tool
 from mcp.client.streamable_http import streamable_http_client
@@ -20,6 +21,7 @@ from langchain_community.chat_models.tongyi import ChatTongyi
 from langchain_community.vectorstores.neo4j_vector import Neo4jVector
 from sentence_transformers import SentenceTransformer
 from src.shuiyuan.objects import User
+from src.shuiyuan.shuiyuan_model import ShuiyuanModel
 
 
 class M3EEmbeddings(Embeddings):
@@ -41,7 +43,7 @@ class MentionTongyiModel:
     A model for managing Tongyi Qianwen data.
     """
 
-    def __init__(self):
+    def __init__(self, model: ShuiyuanModel):
         """
         Initialize the Tongyi Qianwen model and Neo4j vector store.
         """
@@ -108,6 +110,7 @@ class MentionTongyiModel:
         self.exit_stack = AsyncExitStack()
         self.session: Optional[ClientSession] = None
         self.agent_executor: Optional[AgentExecutor] = None
+        self.model = model
 
     def get_session_history(self, session_id: str) -> ChatMessageHistory:
         return self._histories.setdefault(session_id, ChatMessageHistory())
@@ -186,45 +189,72 @@ class MentionTongyiModel:
 
         return langchain_tools
 
-    async def initialize_mcp(self):
-        """
-        Use HTTP to connect to MCP Server and initialize the AgentExecutor with tools.
-        NOTE: This function should be called once during startup.
-        """
-        # Get MCP Server URL from environment or use default
-        mcp_server_url = os.getenv("MCP_SERVER_URL", "http://localhost:8000/mcp")
+    def _load_shuiyuan_tools(self) -> List[StructuredTool]:
+        # These async functions will be used as tools
+        function_list = [
+            "search_user_by_term",
+            "search_post_details_by_optional_username",
+        ]
 
-        try:
-            # Create SSE Client
-            streams = await self.exit_stack.enter_async_context(
-                streamable_http_client(url=mcp_server_url)
-            )
+        # Dynamically create tool wrappers for the above functions
+        tools = []
+        for func_name in function_list:
+            func = getattr(self.model, func_name)
+            if callable(func):
+                tools.append(
+                    StructuredTool.from_function(
+                        coroutine=func,
+                        name=func_name,
+                        description=inspect.getdoc(func)
+                        or f"Tool for calling {func_name}",
+                    )
+                )
 
-            # Create session to read/write streams
-            self.session = await self.exit_stack.enter_async_context(
-                ClientSession(streams[0], streams[1])
-            )
+        return tools
 
-            # Initialize the session
-            await self.session.initialize()
+    async def initialize_agent(self):
+        # MCP tools added here
+        mcp_tools = []
+        mcp_server_url = os.getenv("MCP_SERVER_URL")
 
-            # Load tools from MCP Server
-            mcp_tools = await self._load_mcp_tools(self.session)
-            logging.info(f"MCP Tools Loaded via HTTP: {[t.name for t in mcp_tools]}")
+        if mcp_server_url:
+            # Create MCP streams and session, then load tools from it
+            try:
+                streams = await self.exit_stack.enter_async_context(
+                    streamable_http_client(url=mcp_server_url)
+                )
+                self.session = await self.exit_stack.enter_async_context(
+                    ClientSession(streams[0], streams[1])
+                )
+                await self.session.initialize()
 
-            # Create the Tool Calling Agent
-            agent = create_tool_calling_agent(self.llm, mcp_tools, self.prompt)
+                mcp_tools = await self._load_mcp_tools(self.session)
+                logging.info(
+                    f"MCP Tools Loaded via HTTP: {[t.name for t in mcp_tools]}"
+                )
 
-            self.agent_executor = AgentExecutor(
-                agent=agent,
-                tools=mcp_tools,
-                verbose=True,
-                handle_parsing_errors=True,
-            )
+            except Exception as e:
+                logging.error(
+                    f"Failed to connect to MCP Server at {mcp_server_url}: {e}"
+                )
+                self.agent_executor = None
+                self.session = None
 
-        except Exception as e:
-            logging.error(f"Failed to connect to MCP Server at {mcp_server_url}: {e}")
-            self.agent_executor = None
+        # Shuiyuan-specific tools added here
+        shuiyuan_tools = self._load_shuiyuan_tools()
+
+        # Create the agent with both MCP tools and Shuiyuan tools
+        agent = create_tool_calling_agent(
+            self.llm,
+            mcp_tools + shuiyuan_tools,
+            self.prompt,
+        )
+        self.agent_executor = AgentExecutor(
+            agent=agent,
+            tools=mcp_tools + shuiyuan_tools,
+            verbose=True,
+            handle_parsing_errors=True,
+        )
 
     async def get_pumpkin_response(
         self, conversation: str, user: User
@@ -234,7 +264,7 @@ class MentionTongyiModel:
         """
         # Initialize MCP connection if not already done
         if not self.agent_executor:
-            await self.initialize_mcp()
+            await self.initialize_agent()
 
         # Retrieve similar documents from Neo4j
         docs = await self.retriever.ainvoke(conversation)
