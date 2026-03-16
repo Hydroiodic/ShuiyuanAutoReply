@@ -24,8 +24,8 @@ from langchain_google_genai import (
 )
 from langchain_community.vectorstores.neo4j_vector import Neo4jVector
 from sentence_transformers import SentenceTransformer
-from src.shuiyuan.objects import User
 from src.constants import auto_reply_tag
+from src.shuiyuan.objects import User
 from src.shuiyuan.shuiyuan_model import ShuiyuanModel
 
 
