@@ -458,7 +458,27 @@ class ShuiyuanModel:
     ##             Query Methods Start             ##
     #################################################
 
-    async def search_user_by_term(self, term: str) -> List[User]:
+    async def _retry_wrapper(
+        self,
+        func: callable,
+        *args,
+        retries: int = 3,
+        delay: int = 1,
+        **kwargs,
+    ) -> any:
+        for attempt in range(retries):
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:
+                logging.warning(
+                    f"{func.__name__} attempt {attempt + 1} failed with error: {e}, "
+                    f"traceback is as follows:\n{traceback.format_exc()}"
+                )
+                if attempt < retries - 1:
+                    await asyncio.sleep(delay)
+        raise Exception(f"All {retries} attempts failed for function {func.__name__}")
+
+    async def _search_user_by_term(self, term: str) -> List[User]:
         """
         Search for users by a search term.
 
@@ -475,7 +495,16 @@ class ShuiyuanModel:
         user_list = data.get("users", [])
         return [from_dict(User, user) for user in user_list]
 
-    async def search_post_by_optional_username_topic(
+    async def search_user_by_term(self, term: str) -> List[User]:
+        """
+        Search for users by a search term.
+
+        :param term: The search term to use for finding users. It has to be NON-EMPTY.
+        :return: A list of User instances matching the search term.
+        """
+        return await self._retry_wrapper(self._search_user_by_term, term)
+
+    async def _search_post_by_optional_username_topic(
         self, term: str, username: Optional[str] = None, topic_id: Optional[int] = None
     ) -> List[PostSearchResult]:
         """
@@ -504,6 +533,39 @@ class ShuiyuanModel:
         post_list = data.get("posts", [])
         return [from_dict(PostSearchResult, post) for post in post_list]
 
+    async def _search_post_details_by_optional_username_topic(
+        self, term: str, username: Optional[str] = None, topic_id: Optional[int] = None
+    ) -> List[PostDetails]:
+        """
+        Search for posts by a search term and an optional username, and return detailed information.
+
+        :param term: The search term to use for finding posts. It has to be NON-EMPTY.
+        :param username: An optional username to filter posts by.
+        :param topic_id: An optional topic ID to filter posts by.
+        :return: A list of PostDetails instances matching the search criteria.
+        """
+        # First we search for posts with the given criteria
+        post_search_results = await self._search_post_by_optional_username_topic(
+            term, username, topic_id
+        )
+
+        # For posts with the same topic_id, we can get details in batch to save requests
+        # Separate post IDs by topic ID here
+        grouped_posts = {}
+        for result in post_search_results:
+            grouped_posts.setdefault(result.topic_id, []).append(result.id)
+
+        # Batch get post details for each topic ID
+        post_details_list: List[PostDetails] = []
+        for topic_id, post_ids in grouped_posts.items():
+            details_list = await self.get_post_details_batch_by_topic_id(
+                topic_id, post_ids
+            )
+            post_details_list.extend(details_list)
+
+        # Finally we sort the post details by created_at in descending order to return
+        return sorted(post_details_list, key=lambda x: x.created_at, reverse=True)
+
     async def search_post_details_by_optional_username_topic(
         self, term: str, username: Optional[str] = None, topic_id: Optional[int] = None
     ) -> List[PostDetails]:
@@ -515,22 +577,14 @@ class ShuiyuanModel:
         :param topic_id: An optional topic ID to filter posts by.
         :return: A list of PostDetails instances matching the search criteria.
         """
-        post_search_results = await self.search_post_by_optional_username_topic(
-            term, username, topic_id
+        return await self._retry_wrapper(
+            self._search_post_details_by_optional_username_topic,
+            term,
+            username,
+            topic_id,
         )
-        post_details_list = []
-        for result in post_search_results:
-            try:
-                details = await self.get_post_details(result.id)
-                post_details_list.append(details)
-            except Exception as e:
-                logging.error(
-                    f"Failed to get details for post ID {result.id}, "
-                    f"traceback is as follows:\n{traceback.format_exc()}"
-                )
-        return post_details_list
 
-    async def query_recent_posts_by_topic_id(
+    async def _query_recent_posts_by_topic_id(
         self, topic_id: int, limit: int
     ) -> List[PostDetails]:
         """
@@ -550,6 +604,20 @@ class ShuiyuanModel:
         # Use the last `limit` posts for recent activity
         recent_posts = topic_details.post_stream.stream[-limit:]
         return await self.get_post_details_batch_by_topic_id(topic_id, recent_posts)
+
+    async def query_recent_posts_by_topic_id(
+        self, topic_id: int, limit: int
+    ) -> List[PostDetails]:
+        """
+        Query recent posts in a topic by its ID.
+
+        :param topic_id: The ID of the topic to query.
+        :param limit: The maximum number of recent posts to retrieve.
+        :return: A list of PostDetails instances for the recent posts in the topic.
+        """
+        return await self._retry_wrapper(
+            self._query_recent_posts_by_topic_id, topic_id, limit
+        )
 
 
 def _global_ignore_illegal_cookies() -> None:

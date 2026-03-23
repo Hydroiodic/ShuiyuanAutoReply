@@ -1,11 +1,10 @@
-from typing import Dict, List, Optional
+from typing import Dict, List
 from langchain_google_genai import (
     ChatGoogleGenerativeAI,
     HarmBlockThreshold,
     HarmCategory,
 )
 from .mention_chat_model import MentionChatModel
-from src.shuiyuan.objects import User
 from src.shuiyuan.shuiyuan_model import ShuiyuanModel
 
 
@@ -34,7 +33,13 @@ class MentionGeminiModel(MentionChatModel):
             # thinking_budget=2048,
         )
 
-    def _parse_gemini_output(self, raw_output: List[Dict | str]) -> str:
+    def parse_model_output(self, raw_output: List[Dict | str]) -> str:
+        """
+        Parse the raw output from the model to extract the final response text.
+
+        :param raw_output: The raw output from the model, which is expected to be a list of dicts/strings.
+        :return: The extracted response text.
+        """
         res = ""
         for item in raw_output:
             if isinstance(item, dict) and "text" in item:
@@ -44,39 +49,3 @@ class MentionGeminiModel(MentionChatModel):
             if isinstance(item, str):
                 res += item
         return res.strip()
-
-    async def get_pumpkin_response(
-        self, topic_id: int, conversation: str, user: User
-    ) -> Optional[str]:
-        # Initialize agent for the first time
-        if not self.agent_executor:
-            await self.initialize_agent()
-
-        docs = await self.retriever.ainvoke(conversation)
-        context_text = "\n".join([doc.page_content for doc in docs])
-
-        history_obj = self.get_session_history(topic_id)
-        current_history_messages = history_obj.messages
-
-        recent_msgs = await self.get_recent_msgs_context(topic_id)
-
-        agent_input = {
-            "topic_id": topic_id,
-            "username": user.username,
-            "name": user.name or "",
-            "question": conversation,
-            "context": context_text,
-            "chat_history": current_history_messages,
-            "recent_msgs": recent_msgs,
-        }
-
-        # Here we assume that agent_executor must not be None
-        response = await self.agent_executor.ainvoke(agent_input)
-        raw_output = response.get("output")
-        final_clean_text = self._parse_gemini_output(raw_output)
-
-        # Append history for the session
-        history_obj.add_user_message(conversation)
-        history_obj.add_ai_message(final_clean_text)
-
-        return final_clean_text

@@ -253,26 +253,106 @@ class MentionChatModel:
             handle_parsing_errors=True,
         )
 
+    def _arrange_post_text(self, raw: str, user: User) -> str:
+        """
+        Arrange the raw post text along with user information into a formatted string.
+
+        :param raw: The raw content of the post.
+        :param user: The User object containing user information.
+        :return: A formatted string containing the arranged post text.
+        """
+        identity_info = f"- 用户【{user.username}】"
+        identity_info += f" (昵称【{user.name}】)" if user.name else ""
+        arranged_text = f"{identity_info}说：\n{raw}"
+        return arranged_text.strip()
+
     async def _get_recent_posts(self, topic_id: int, limit: int) -> List[PostDetails]:
+        """
+        Get recent posts in the topic, excluding those that contain the auto-reply tag.
+
+        :param topic_id: The ID of the topic to retrieve recent posts from.
+        :param limit: The maximum number of recent posts to retrieve.
+        :return: A list of PostDetails instances for recent posts in the topic.
+        """
         recent_posts = await self.model.query_recent_posts_by_topic_id(topic_id, limit)
         return [
             post for post in recent_posts if post.raw and auto_reply_tag not in post.raw
         ]
 
     async def get_recent_msgs_context(self, topic_id: int, limit: int = 10) -> str:
+        """
+        Get recent posts in the topic and arrange them into a text block for context.
+
+        :param topic_id: The ID of the topic to retrieve recent posts from.
+        :param limit: The maximum number of recent posts to retrieve.
+        :return: A formatted string containing the recent posts.
+        """
         recent_posts = await self._get_recent_posts(topic_id, limit)
         if not recent_posts:
             return "无近期回帖记录"
 
-        context = ""
-        for post in recent_posts:
-            identity_info = f"用户【{post.username}】"
-            identity_info += f" (昵称【{post.name}】)" if post.name else ""
-            context += f"- {identity_info}:\n{post.raw}\n"
-        return context.strip()
+        return "\n\n".join(
+            [
+                self._arrange_post_text(
+                    post.raw, User(post.user_id, post.username, post.name)
+                )
+                for post in recent_posts
+            ]
+        )
 
     @abstractmethod
+    def parse_model_output(self, raw_output) -> str:
+        """
+        Parse the raw output from the model to extract the final response text.
+
+        :param raw_output: The raw output from the model.
+        :return: The extracted response text.
+        """
+        pass
+
     async def get_pumpkin_response(
         self, topic_id: int, conversation: str, user: User
     ) -> Optional[str]:
-        pass
+        """
+        Let the model respond based on conversation and similar responses.
+
+        :param topic_id: The ID of the topic where the conversation is happening.
+        :param conversation: The current user input or conversation snippet to respond to.
+        :param user: The User object representing the user who initiated the conversation.
+        :return: The model's response as a string, or None if no response is generated.
+        """
+        # Initialize MCP connection if not already done
+        if not self.agent_executor:
+            await self.initialize_agent()
+
+        # Retrieve similar documents from Neo4j
+        docs = await self.retriever.ainvoke(conversation)
+        context_text = "\n".join([doc.page_content for doc in docs])
+
+        # Get the session history for the topic
+        history_obj = self.get_session_history(topic_id)
+        current_history_messages = history_obj.messages
+
+        # Retrieve recent posts in the same topic to provide more context
+        recent_msgs = await self.get_recent_msgs_context(topic_id)
+
+        agent_input = {
+            "topic_id": topic_id,
+            "username": user.username,
+            "name": user.name or "",
+            "question": conversation,
+            "context": context_text,
+            "chat_history": current_history_messages,
+            "recent_msgs": recent_msgs,
+        }
+
+        # Here we assume that agent_executor must not be None
+        response = await self.agent_executor.ainvoke(agent_input)
+        raw_output = response.get("output")
+        final_clean_text = self.parse_model_output(raw_output)
+
+        # Append history for the session
+        history_obj.add_user_message(self._arrange_post_text(conversation, user))
+        history_obj.add_ai_message(final_clean_text)
+
+        return final_clean_text
