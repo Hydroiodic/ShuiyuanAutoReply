@@ -83,11 +83,12 @@ class MentionModel(BaseUserActionModel):
         reply = f"{reply}\n\n（内容由AI生成，仅供参考）"
         return MentionModel._make_unique_reply(reply)
 
-    async def _clear_condition(self, raw: str, user: User) -> Optional[str]:
+    async def _clear_condition(self, raw: str, topic_id: int) -> Optional[str]:
         """
         Check if the raw content of a post contains the string "【清除历史】".
 
         :param raw: The raw content of the post.
+        :param topic_id: The ID of the topic where the post is located.
         :return: A string to reply to the post if the condition is met, otherwise None.
         """
         # If the raw content does not contain "清除历史", we return None
@@ -95,9 +96,9 @@ class MentionModel(BaseUserActionModel):
             return None
 
         # Clear the session history for the user
-        self.mention_google_model.clear_session_history(user.id)
+        self.mention_google_model.clear_session_history(topic_id)
 
-        return MentionModel._make_unique_reply("已清除与小南瓜的对话历史记录")
+        return MentionModel._make_unique_reply("已清除当前话题中的对话历史记录")
 
     def _help_condition(self, raw: str) -> Optional[str]:
         """
@@ -113,7 +114,7 @@ class MentionModel(BaseUserActionModel):
         return MentionModel._make_unique_reply(
             "帮助信息如下：\n"
             "1. 输入【小南瓜】+对话，与南瓜bot聊天 :jack_o_lantern:\n"
-            "2. 输入【清除历史】，清除与小南瓜的对话历史记录 :broom:\n"
+            "2. 输入【清除历史】，清除当前话题中的对话历史记录 :broom:\n"
             "3. 输入【帮助】，查看该帮助信息 :question:"
         )
 
@@ -162,7 +163,7 @@ class MentionModel(BaseUserActionModel):
                 return
 
             # Check clear condition
-            text = await self._clear_condition(post_details.raw, post_user)
+            text = await self._clear_condition(post_details.raw, post_details.topic_id)
             if text is not None:
                 return
 

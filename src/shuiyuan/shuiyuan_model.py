@@ -270,7 +270,7 @@ class ShuiyuanModel:
         response = await self._rate_limited_request(
             "get",
             f"{get_topic_url}/{topic_id}/posts.json",
-            params={"post_ids[]": post_ids},
+            params={"post_ids[]": post_ids, "include_raw": "true"},
         )
         data = await response.json()
         post_stream = data.get("post_stream", {})
