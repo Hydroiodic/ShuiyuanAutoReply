@@ -257,6 +257,43 @@ class ShuiyuanModel:
         data = await response.json()
         return from_dict(PostDetails, data)
 
+    async def get_post_details_by_post_number(
+        self, topic_id: int, post_number: int
+    ) -> PostDetails:
+        """
+        Get the details of a post by its topic ID and post number.
+
+        :param topic_id: The ID of the topic the post belongs to.
+        :param post_number: The post number within the topic.
+        :return: An instance of PostDetails containing the post information.
+        """
+        response = await self._rate_limited_request(
+            "get",
+            f"{get_topic_url}/{topic_id}/{post_number}.json",
+        )
+        if response.status != 200:
+            raise Exception(f"Failed to get post details: {await response.text()}")
+
+        data = await response.json()
+        post_stream = data.get("post_stream", {})
+        posts = post_stream.get("posts", [])
+        if not posts:
+            raise Exception(
+                f"Post with number {post_number} not found in topic {topic_id}"
+            )
+
+        # Find the specific post with the given post number
+        post_data = next(
+            (post for post in posts if post.get("post_number") == post_number),
+            None,
+        )
+        if not post_data:
+            raise Exception(
+                f"Post with number {post_number} not found in topic {topic_id}"
+            )
+
+        return from_dict(PostDetails, post_data)
+
     async def get_post_details_batch_by_topic_id(
         self, topic_id: int, post_ids: List[int]
     ) -> List[PostDetails]:
@@ -276,6 +313,24 @@ class ShuiyuanModel:
         post_stream = data.get("post_stream", {})
         posts = post_stream.get("posts", [])
         return [from_dict(PostDetails, post_data) for post_data in posts]
+
+    async def get_voters_by_post_id(self, post_id: int) -> VoterDetails:
+        """
+        Get the voters of a poll by the post ID.
+
+        :param post_id: The ID of the post containing the poll.
+        :return: A VoterDetails instance containing the voter information.
+        """
+        response = await self._rate_limited_request(
+            "get",
+            f"{voter_url}",
+            params={"post_id": post_id, "poll_name": "poll", "limit": 999},
+        )
+        if response.status != 200:
+            raise Exception(f"Failed to get voters: {await response.text()}")
+
+        voter_data = await response.json()
+        return from_dict(VoterDetails, voter_data)
 
     async def get_actions(self, username: str, filter: List[int]) -> UserActions:
         """
@@ -505,18 +560,23 @@ class ShuiyuanModel:
         return await self._retry_wrapper(self._search_user_by_term, term)
 
     async def _search_post_by_optional_username_topic(
-        self, term: str, username: Optional[str] = None, topic_id: Optional[int] = None
+        self,
+        term: str,
+        latest: bool = False,
+        username: Optional[str] = None,
+        topic_id: Optional[int] = None,
     ) -> List[PostSearchResult]:
         """
         Search for posts by a search term and an optional username.
 
         :param term: The search term to use for finding posts. It has to be NON-EMPTY.
+        :param latest: Whether to sort the results by created_at in descending order. Default is False.
         :param username: An optional username to filter posts by.
         :param topic_id: An optional topic ID to filter posts by.
         :return: A list of PostSearchResult instances matching the search criteria.
         """
         # Construct the params
-        params = {"term": term}
+        params = {"term": f"{term} order:{"latest" if latest else ""}"}
         if username:
             params["term"] += f" @{username}"
         if topic_id:
@@ -534,12 +594,17 @@ class ShuiyuanModel:
         return [from_dict(PostSearchResult, post) for post in post_list]
 
     async def _search_post_details_by_optional_username_topic(
-        self, term: str, username: Optional[str] = None, topic_id: Optional[int] = None
+        self,
+        term: str,
+        latest: bool = False,
+        username: Optional[str] = None,
+        topic_id: Optional[int] = None,
     ) -> List[PostDetails]:
         """
         Search for posts by a search term and an optional username, and return detailed information.
 
-        :param term: The search term to use for finding posts. It has to be NON-EMPTY.
+        :param term: The search term to use for finding posts. Empty str means no keyword filtering.
+        :param latest: Whether to sort the results by created_at in descending order. Default is False.
         :param username: An optional username to filter posts by.
         :param topic_id: An optional topic ID to filter posts by.
         :return: A list of PostDetails instances matching the search criteria.
@@ -567,12 +632,17 @@ class ShuiyuanModel:
         return sorted(post_details_list, key=lambda x: x.created_at, reverse=True)
 
     async def search_post_details_by_optional_username_topic(
-        self, term: str, username: Optional[str] = None, topic_id: Optional[int] = None
+        self,
+        term: str,
+        latest: bool = False,
+        username: Optional[str] = None,
+        topic_id: Optional[int] = None,
     ) -> List[PostDetails]:
         """
         Search for posts by a search term and an optional username, and return detailed information.
 
-        :param term: The search term to use for finding posts. It has to be NON-EMPTY.
+        :param term: The search term to use for finding posts. Empty str means no keyword filtering.
+        :param latest: Whether to sort the results by created_at in descending order. Default is False.
         :param username: An optional username to filter posts by.
         :param topic_id: An optional topic ID to filter posts by.
         :return: A list of PostDetails instances matching the search criteria.
@@ -580,6 +650,7 @@ class ShuiyuanModel:
         return await self._retry_wrapper(
             self._search_post_details_by_optional_username_topic,
             term,
+            latest,
             username,
             topic_id,
         )

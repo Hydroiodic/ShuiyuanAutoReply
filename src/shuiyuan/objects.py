@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Dict
 
 
 @dataclass
@@ -11,6 +11,47 @@ class User:
     id: int
     username: str
     name: Optional[str]
+
+
+@dataclass
+class PollOption:
+    """
+    Represents an option in a poll.
+    """
+
+    id: str
+    html: str
+    votes: Optional[int]
+
+
+@dataclass
+class PollDetails:
+    """
+    Represents a poll in a topic.
+    """
+
+    id: int
+    name: str
+    voters: int
+    type: Literal["regular", "multiple", "number", "ranked_choice"]
+    status: Literal["open", "closed"]
+    public: Optional[bool]
+    dynamic: Optional[bool]
+    results: Literal["always", "on_vote", "on_close"]
+    min: Optional[int]
+    max: Optional[int]
+    chart_type: Literal["bar", "pie"]
+    title: Optional[str]
+    options: List[PollOption]
+
+
+@dataclass
+class VoterDetails:
+    """
+    Represents the details of voters in polls.
+    """
+
+    voters: Dict[str, List[User]]
 
 
 @dataclass
@@ -49,6 +90,7 @@ class PostDetails:
     reply_count: int
     reply_to_post_number: Optional[int]
     reply_to_user: Optional[User]
+    polls: Optional[List[PollDetails]]
     yours: bool
     topic_id: int
     can_edit: bool
