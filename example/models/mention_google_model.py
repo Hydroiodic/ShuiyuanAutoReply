@@ -1,9 +1,12 @@
-from typing import Dict, List
+import asyncio
+import logging
+from typing import Dict, List, override
 from langchain_google_genai import (
     ChatGoogleGenerativeAI,
     HarmBlockThreshold,
     HarmCategory,
 )
+from google.genai.errors import ServerError
 from .mention_chat_model import MentionChatModel
 from src.shuiyuan.shuiyuan_model import ShuiyuanModel
 
@@ -49,3 +52,15 @@ class MentionGeminiModel(MentionChatModel):
             if isinstance(item, str):
                 res += item
         return res.strip()
+
+    @override
+    async def get_pumpkin_response(self, topic_id, conversation, user):
+        # Retry up to 3 times
+        for _ in range(3):
+            try:
+                return await super().get_pumpkin_response(topic_id, conversation, user)
+            except ServerError as e:
+                logging.warning(f"Error getting response: {e}. Retrying...")
+                await asyncio.sleep(1)
+        # If all retries fail, raise an exception
+        raise RuntimeError("Failed to get response after 3 attempts")
