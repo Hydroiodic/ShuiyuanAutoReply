@@ -561,22 +561,22 @@ class ShuiyuanModel:
 
     async def _search_post_by_optional_username_topic(
         self,
-        term: str,
+        term: str = "",
         latest: bool = False,
         username: Optional[str] = None,
         topic_id: Optional[int] = None,
     ) -> List[PostSearchResult]:
         """
-        Search for posts by a search term and an optional username.
+        Search for posts by a search term, an optional username and an optional topic ID, and return detailed information.
 
-        :param term: The search term to use for finding posts. It has to be NON-EMPTY.
+        :param term: Optional search term to use for finding posts. Default is empty.
         :param latest: Whether to sort the results by created_at in descending order. Default is False.
-        :param username: An optional username to filter posts by.
-        :param topic_id: An optional topic ID to filter posts by.
+        :param username: An optional username to filter posts by. Default is None.
+        :param topic_id: An optional topic ID to filter posts by. Default is None.
         :return: A list of PostSearchResult instances matching the search criteria.
         """
         # Construct the params
-        params = {"term": f"{term} order:{"latest" if latest else ""}"}
+        params = {"term": f"{term} order:{"latest" if latest else "none"}"}
         if username:
             params["term"] += f" @{username}"
         if topic_id:
@@ -601,17 +601,17 @@ class ShuiyuanModel:
         topic_id: Optional[int] = None,
     ) -> List[PostDetails]:
         """
-        Search for posts by a search term and an optional username, and return detailed information.
+        Search for posts by a search term, an optional username and an optional topic ID, and return detailed information.
 
-        :param term: The search term to use for finding posts. Empty str means no keyword filtering.
+        :param term: Optional search term to use for finding posts. Default is empty.
         :param latest: Whether to sort the results by created_at in descending order. Default is False.
-        :param username: An optional username to filter posts by.
-        :param topic_id: An optional topic ID to filter posts by.
-        :return: A list of PostDetails instances matching the search criteria.
+        :param username: An optional username to filter posts by. Default is None.
+        :param topic_id: An optional topic ID to filter posts by. Default is None.
+        :return: A list of PostSearchResult instances matching the search criteria.
         """
         # First we search for posts with the given criteria
         post_search_results = await self._search_post_by_optional_username_topic(
-            term, username, topic_id
+            term, latest, username, topic_id
         )
 
         # For posts with the same topic_id, we can get details in batch to save requests
@@ -639,13 +639,13 @@ class ShuiyuanModel:
         topic_id: Optional[int] = None,
     ) -> List[PostDetails]:
         """
-        Search for posts by a search term and an optional username, and return detailed information.
+        Search for posts by a search term, an optional username and an optional topic ID, and return detailed information.
 
-        :param term: The search term to use for finding posts. Empty str means no keyword filtering.
+        :param term: Optional search term to use for finding posts. Default is empty.
         :param latest: Whether to sort the results by created_at in descending order. Default is False.
-        :param username: An optional username to filter posts by.
-        :param topic_id: An optional topic ID to filter posts by.
-        :return: A list of PostDetails instances matching the search criteria.
+        :param username: An optional username to filter posts by. Default is None.
+        :param topic_id: An optional topic ID to filter posts by. Default is None.
+        :return: A list of PostSearchResult instances matching the search criteria.
         """
         return await self._retry_wrapper(
             self._search_post_details_by_optional_username_topic,
