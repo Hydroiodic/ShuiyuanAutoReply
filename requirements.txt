@@ -8,7 +8,7 @@ dotenv
 httpx[socks]
 langchain-community
 langchain-google-genai
-mcp
+langchain-mcp-adapters
 neomodel
 numpy
 openai

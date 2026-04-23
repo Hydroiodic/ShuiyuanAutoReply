@@ -2,11 +2,7 @@ import os
 import logging
 import inspect
 from abc import abstractmethod
-from contextlib import AsyncExitStack
-from mcp import ClientSession, Tool
-from mcp.client.streamable_http import streamable_http_client
 from typing import Optional, Dict, List
-from pydantic import BaseModel, create_model
 from langchain_core.tools import StructuredTool
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
@@ -16,9 +12,10 @@ from langchain_core.prompts import (
     HumanMessagePromptTemplate,
     MessagesPlaceholder,
 )
-from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
+from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_community.vectorstores.neo4j_vector import Neo4jVector
+from langchain_mcp_adapters.client import MultiServerMCPClient
 from sentence_transformers import SentenceTransformer
 from src.constants import auto_reply_tag
 from src.shuiyuan.objects import User, PostDetails
@@ -103,9 +100,7 @@ class MentionChatModel:
         # Initialize message histories
         self._histories: Dict[str, ChatMessageHistory] = {}
 
-        # MCP Context Management
-        self.exit_stack = AsyncExitStack()
-        self.session: Optional[ClientSession] = None
+        # Agent instances
         self.agent_executor: Optional[AgentExecutor] = None
         self.model = model
 
@@ -118,73 +113,27 @@ class MentionChatModel:
     def clear_session_history(self, session_id: str) -> None:
         self._histories.pop(session_id, None)
 
-    def _get_tool_schema_class(self, tool: Tool) -> BaseModel:
-        input_schema = getattr(tool, "inputSchema", None) or {}
-        properties = input_schema.get("properties", {}) or {}
-        required = input_schema.get("required", []) or []
-
-        fields = {}
-        for name, prop in properties.items():
-            json_type = prop.get("type")
-            py_type = str
-            if json_type == "integer":
-                py_type = int
-            elif json_type == "number":
-                py_type = float
-            elif json_type == "boolean":
-                py_type = bool
-            elif json_type == "array":
-                py_type = list
-            elif json_type == "object":
-                py_type = dict
-
-            default = ... if name in required else None
-            fields[name] = (py_type, default)
-
-        if fields:
-            ArgsModel = create_model(
-                f"MCPTool_{tool.name}_Args",
-                __base__=BaseModel,
-                **fields,
-            )
-        else:
-
-            class ArgsModel(BaseModel):
-                pass
-
-        return ArgsModel
-
-    async def _load_mcp_tools(self, session: ClientSession) -> List[StructuredTool]:
+    async def _load_mcp_tools(self, url: str) -> List[StructuredTool]:
         """
         Load tools from MCP Server and convert them to LangChain StructuredTool.
         """
         # Get the list of tools from MCP Server
-        mcp_tools = await session.list_tools()
-        langchain_tools = []
+        client = MultiServerMCPClient(
+            {
+                "default": {
+                    "transport": "http",
+                    "url": url,
+                }
+            }
+        )
+        mcp_tools = await client.get_tools()
 
-        for tool in mcp_tools.tools:
-            # Factory to bind the current tool name and avoid late-binding closure bugs
-            def make_execution_wrapper(tool_name: str):
-                async def _execution_wrapper(**kwargs):
-                    # Call the tool on MCP Server using the bound name
-                    result = await session.call_tool(tool_name, arguments=kwargs)
-                    # Return the text content
-                    return result.content[0].text
+        # Log all tools loaded
+        logging.info("MCP Tools loaded:")
+        for tool in mcp_tools:
+            logging.info(f"{tool.name}: {tool.description}")
 
-                return _execution_wrapper
-
-            # Create a LangChain StructuredTool
-            # Note: We set func=None and provide coroutine to enforce async usage
-            lc_tool = StructuredTool.from_function(
-                func=None,
-                coroutine=make_execution_wrapper(tool.name),
-                name=tool.name,
-                description=tool.description,
-                args_schema=self._get_tool_schema_class(tool),
-            )
-            langchain_tools.append(lc_tool)
-
-        return langchain_tools
+        return mcp_tools
 
     def _load_shuiyuan_tools(self) -> List[StructuredTool]:
         # These async functions will be used as tools
@@ -217,25 +166,11 @@ class MentionChatModel:
         if mcp_server_url:
             # Create MCP streams and session, then load tools from it
             try:
-                streams = await self.exit_stack.enter_async_context(
-                    streamable_http_client(url=mcp_server_url)
-                )
-                self.session = await self.exit_stack.enter_async_context(
-                    ClientSession(streams[0], streams[1])
-                )
-                await self.session.initialize()
-
-                mcp_tools = await self._load_mcp_tools(self.session)
-                logging.info(
-                    f"MCP Tools Loaded via HTTP: {[t.name for t in mcp_tools]}"
-                )
-
+                mcp_tools = await self._load_mcp_tools(mcp_server_url)
             except Exception as e:
                 logging.error(
                     f"Failed to connect to MCP Server at {mcp_server_url}: {e}"
                 )
-                self.agent_executor = None
-                self.session = None
 
         # Shuiyuan-specific tools added here
         shuiyuan_tools = self._load_shuiyuan_tools()
