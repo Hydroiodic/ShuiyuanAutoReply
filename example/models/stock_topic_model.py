@@ -1,16 +1,18 @@
-import io
-import time
-import aiohttp
 import asyncio
+import io
 import logging
+import time
 import traceback
+from typing import List, Optional
+
+import aiohttp
 from PIL import Image
-from typing import Optional, List
-from src.shuiyuan.shuiyuan_model import ShuiyuanModel
-from src.shuiyuan.topic_model import BaseTopicModel
+
 from src.ashare.ashare_model import AShareModel
 from src.ashare.objects import StockData
 from src.constants import auto_reply_tag
+from src.shuiyuan.shuiyuan_model import ShuiyuanModel
+from src.shuiyuan.topic_model import BaseTopicModel
 
 
 class StockTopicModel(BaseTopicModel):

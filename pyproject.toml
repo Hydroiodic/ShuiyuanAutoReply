@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shuiyuan_auto_reply"
+version = "0.1.0"
+description = "A project for automatic replies using LangChain and Google GenAI."
+authors = [{ name = "HydroiodicAcid", email = "liao_chengfan@sjtu.edu.cn" }]
+requires-python = ">=3.12"
+dependencies = [
+    "aiohttp",
+    "aiomysql",
+    "apscheduler",
+    "dacite",
+    "dashscope",
+    "ddgs",
+    "dotenv",
+    "httpx[socks]",
+    "langchain-community",
+    "langchain-google-genai",
+    "langchain-mcp-adapters",
+    "neomodel",
+    "numpy",
+    "openai",
+    "pandas",
+    "pillow",
+    "pymysql",
+    "sentence-transformers",
+    "skia-python",
+    "sqlalchemy",
+]
+
+[tool.isort]
+profile = "black"

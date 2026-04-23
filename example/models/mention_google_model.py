@@ -1,14 +1,16 @@
 import asyncio
 import logging
-from typing import Dict, List, override
+from typing import Dict, List, Optional, override
+
 from langchain_google_genai import (
     ChatGoogleGenerativeAI,
     HarmBlockThreshold,
     HarmCategory,
 )
-from google.genai.errors import ServerError
+
+from src.shuiyuan.shuiyuan_model import ShuiyuanModel, User
+
 from .mention_chat_model import MentionChatModel
-from src.shuiyuan.shuiyuan_model import ShuiyuanModel
 
 
 class MentionGeminiModel(MentionChatModel):
@@ -22,7 +24,7 @@ class MentionGeminiModel(MentionChatModel):
 
         # Then initialize the Gemini model with specific parameters
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-3.1-pro-preview",
+            model="gemini-3.1-flash-lite-preview",
             temperature=0.8,
             safety_settings={
                 # HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
@@ -54,13 +56,19 @@ class MentionGeminiModel(MentionChatModel):
         return res.strip()
 
     @override
-    async def get_pumpkin_response(self, topic_id, conversation, user):
-        # Retry up to 3 times
-        for _ in range(3):
+    async def get_pumpkin_response(
+        self, topic_id: int, conversation: str, user: User
+    ) -> Optional[str]:
+        # Retry for a maximum of 5 attempts with a delay between retries
+        retry_count = 5
+        for _ in range(retry_count):
             try:
-                return await super().get_pumpkin_response(topic_id, conversation, user)
-            except ServerError as e:
+                return await asyncio.wait_for(
+                    super().get_pumpkin_response(topic_id, conversation, user),
+                    timeout=60.0,
+                )
+            except Exception as e:
                 logging.warning(f"Error getting response: {e}. Retrying...")
-                await asyncio.sleep(1)
+                await asyncio.sleep(10)
         # If all retries fail, raise an exception
-        raise RuntimeError("Failed to get response after 3 attempts")
+        raise RuntimeError(f"Failed to get response after {retry_count} attempts")

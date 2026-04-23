@@ -1,7 +1,9 @@
-import re
 import random
-import skia
+import re
 from typing import List, Literal, Optional
+
+import skia
+
 from .constants import *
 
 

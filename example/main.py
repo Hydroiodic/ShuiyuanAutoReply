@@ -1,6 +1,7 @@
 import asyncio
-import dotenv
 import logging
+
+import dotenv
 
 # Setup the logging configuration
 logging.basicConfig(
@@ -19,12 +20,13 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+from models.mention_model import MentionModel
+from models.record_topic_model import RecordTopicModel
+from models.stock_topic_model import StockTopicModel
+from models.tarot_topic_model import TarotTopicModel
+
 from src.shuiyuan.objects import TimeInADay
 from src.shuiyuan.shuiyuan_model import ShuiyuanModel
-from models.mention_model import MentionModel
-from models.tarot_topic_model import TarotTopicModel
-from models.stock_topic_model import StockTopicModel
-from models.record_topic_model import RecordTopicModel
 
 
 async def main():

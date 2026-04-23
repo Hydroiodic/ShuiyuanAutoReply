@@ -1,9 +1,10 @@
 import os
-from typing import Optional
+
 from langchain_community.chat_models.tongyi import ChatTongyi
-from .mention_chat_model import MentionChatModel
-from src.shuiyuan.objects import User
+
 from src.shuiyuan.shuiyuan_model import ShuiyuanModel
+
+from .mention_chat_model import MentionChatModel
 
 
 class MentionTongyiModel(MentionChatModel):

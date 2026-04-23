@@ -1,23 +1,26 @@
-import io
-import os
-import skia
-import math
 import asyncio
+import io
 import logging
+import math
+import os
 import traceback
-from .tarot_tongyi_model import TarotTongyiModel
 from typing import Optional
+
+import skia
+
 from src.constants import assets_directory, auto_reply_tag
 from src.fortune.fortune_model import FortuneModel
 from src.shuiyuan.objects import User
 from src.shuiyuan.shuiyuan_model import ShuiyuanModel
 from src.shuiyuan.topic_model import BaseTopicModel
-from src.tarot.tarot_model import TarotModel
 from src.tarot.tarot_group_data import (
     TarotResult,
     get_image_from_cache,
     save_image_to_cache,
 )
+from src.tarot.tarot_model import TarotModel
+
+from .tarot_tongyi_model import TarotTongyiModel
 
 
 class TarotTopicModel(BaseTopicModel):

@@ -1,12 +1,13 @@
 import asyncio
-import random
 import logging
+import random
 import traceback
-from typing import List
 from abc import abstractmethod
+from typing import List
+
+from ..constants import auto_reply_tag
 from .objects import UserActionDetails
 from .shuiyuan_model import ShuiyuanModel
-from ..constants import auto_reply_tag
 
 
 class BaseUserActionModel:

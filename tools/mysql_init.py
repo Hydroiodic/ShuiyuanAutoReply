@@ -1,6 +1,7 @@
 import asyncio
-import dotenv
 import logging
+
+import dotenv
 
 # Setup the logging configuration
 logging.basicConfig(

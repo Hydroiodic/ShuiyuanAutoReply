@@ -1,8 +1,9 @@
 import json
-import random
 import logging
+import random
 import traceback
 from typing import List, Type
+
 from .tarot_group_data import *
 from .tarot_group_model import TarotGroupModel
 

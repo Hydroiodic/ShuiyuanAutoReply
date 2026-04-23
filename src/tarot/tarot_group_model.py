@@ -1,4 +1,5 @@
 from typing import Optional
+
 from ..tongyi.tongyi_model import BaseTongyiModel
 from .tarot_group_data import tarot_groups
 

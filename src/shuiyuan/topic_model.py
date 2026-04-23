@@ -1,12 +1,14 @@
 import asyncio
-import random
 import logging
+import random
 import traceback
 from abc import abstractmethod
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+from ..constants import auto_reply_tag
 from .objects import TimeInADay
 from .shuiyuan_model import ShuiyuanModel
-from ..constants import auto_reply_tag
 
 
 class BaseTopicModel:
