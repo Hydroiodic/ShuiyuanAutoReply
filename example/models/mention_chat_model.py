@@ -20,9 +20,9 @@ from langchain_core.tools import StructuredTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from sentence_transformers import SentenceTransformer
 
-from src.constants import auto_reply_tag
-from src.shuiyuan.objects import PostDetails, User
-from src.shuiyuan.shuiyuan_model import ShuiyuanModel
+from shuiyuan_auto_reply.constants import auto_reply_tag
+from shuiyuan_auto_reply.shuiyuan.objects import PostDetails, User
+from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 
 
 class M3EEmbeddings(Embeddings):

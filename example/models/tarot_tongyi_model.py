@@ -1,7 +1,7 @@
 from typing import Optional
 
-from src.tarot.tarot_group_data import BaseTarotGroup
-from src.tongyi.tongyi_model import BaseTongyiModel
+from shuiyuan_auto_reply.tarot.tarot_group_data import BaseTarotGroup
+from shuiyuan_auto_reply.tongyi.tongyi_model import BaseTongyiModel
 
 
 class TarotTongyiModel(BaseTongyiModel):

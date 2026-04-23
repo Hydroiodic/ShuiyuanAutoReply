@@ -8,7 +8,7 @@ from langchain_google_genai import (
     HarmCategory,
 )
 
-from src.shuiyuan.shuiyuan_model import ShuiyuanModel, User
+from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel, User
 
 from .mention_chat_model import MentionChatModel
 

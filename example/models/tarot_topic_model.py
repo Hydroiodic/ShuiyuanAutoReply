@@ -8,17 +8,17 @@ from typing import Optional
 
 import skia
 
-from src.constants import assets_directory, auto_reply_tag
-from src.fortune.fortune_model import FortuneModel
-from src.shuiyuan.objects import User
-from src.shuiyuan.shuiyuan_model import ShuiyuanModel
-from src.shuiyuan.topic_model import BaseTopicModel
-from src.tarot.tarot_group_data import (
+from shuiyuan_auto_reply.constants import assets_directory, auto_reply_tag
+from shuiyuan_auto_reply.fortune.fortune_model import FortuneModel
+from shuiyuan_auto_reply.shuiyuan.objects import User
+from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
+from shuiyuan_auto_reply.shuiyuan.topic_model import BaseTopicModel
+from shuiyuan_auto_reply.tarot.tarot_group_data import (
     TarotResult,
     get_image_from_cache,
     save_image_to_cache,
 )
-from src.tarot.tarot_model import TarotModel
+from shuiyuan_auto_reply.tarot.tarot_model import TarotModel
 
 from .tarot_tongyi_model import TarotTongyiModel
 

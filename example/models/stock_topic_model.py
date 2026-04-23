@@ -8,11 +8,11 @@ from typing import List, Optional
 import aiohttp
 from PIL import Image
 
-from src.ashare.ashare_model import AShareModel
-from src.ashare.objects import StockData
-from src.constants import auto_reply_tag
-from src.shuiyuan.shuiyuan_model import ShuiyuanModel
-from src.shuiyuan.topic_model import BaseTopicModel
+from shuiyuan_auto_reply.ashare.ashare_model import AShareModel
+from shuiyuan_auto_reply.ashare.objects import StockData
+from shuiyuan_auto_reply.constants import auto_reply_tag
+from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
+from shuiyuan_auto_reply.shuiyuan.topic_model import BaseTopicModel
 
 
 class StockTopicModel(BaseTopicModel):

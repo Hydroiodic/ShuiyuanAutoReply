@@ -4,10 +4,10 @@ import re
 import traceback
 from typing import Dict, List, Optional
 
-from src.constants import auto_reply_tag
-from src.shuiyuan.objects import User, UserActionDetails
-from src.shuiyuan.shuiyuan_model import ShuiyuanModel
-from src.shuiyuan.user_action_model import BaseUserActionModel
+from shuiyuan_auto_reply.constants import auto_reply_tag
+from shuiyuan_auto_reply.shuiyuan.objects import User, UserActionDetails
+from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
+from shuiyuan_auto_reply.shuiyuan.user_action_model import BaseUserActionModel
 
 from .mention_google_model import MentionGeminiModel
 

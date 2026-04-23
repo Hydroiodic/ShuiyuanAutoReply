@@ -21,8 +21,8 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.constants import auto_reply_tag
-from src.database.neo4j_mgr import global_async_neo4j_manager
+from shuiyuan_auto_reply.constants import auto_reply_tag
+from shuiyuan_auto_reply.database.neo4j_mgr import global_async_neo4j_manager
 
 
 async def init_database():

@@ -2,7 +2,7 @@ import os
 
 from langchain_community.chat_models.tongyi import ChatTongyi
 
-from src.shuiyuan.shuiyuan_model import ShuiyuanModel
+from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 
 from .mention_chat_model import MentionChatModel
 

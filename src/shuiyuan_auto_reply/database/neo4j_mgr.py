@@ -17,9 +17,11 @@ from sentence_transformers import SentenceTransformer
 
 
 class SentenceNode(StructuredNode):
+    __label__ = "Sentence"
+
     text = StringProperty(required=True)
     embedding = ArrayProperty(FloatProperty(), required=True)
-    category = StringProperty(default=None)
+    category = StringProperty(required=False)
     created_at = DateTimeProperty(default_now=True)
 
 
@@ -32,9 +34,16 @@ class SentenceResponse(BaseModel):
 class AsyncNeo4jDatabaseManager:
 
     def __init__(self, model_name: str = "moka-ai/m3e-base"):
-        config.DATABASE_URL = self._build_database_url()
         self.model = SentenceTransformer(model_name)
         self.database_name = "neo4j"
+        self._configured = False
+
+    def _ensure_configured(self) -> None:
+        if self._configured:
+            return
+
+        config.DATABASE_URL = self._build_database_url()
+        self._configured = True
 
     def _build_database_url(self) -> str:
         raw_url = os.getenv("NEO4J_DB_URL", "").strip()
@@ -55,6 +64,7 @@ class AsyncNeo4jDatabaseManager:
         return f"bolt://{quote(str(username))}:{quote(str(password))}@{raw_url}"
 
     def _run_cypher(self, query: str, params: Optional[dict] = None):
+        self._ensure_configured()
         return db.cypher_query(query, params=params or {})
 
     async def initialize(self):
@@ -73,7 +83,7 @@ class AsyncNeo4jDatabaseManager:
             self._run_cypher,
             """
             CREATE VECTOR INDEX sentence_embeddings IF NOT EXISTS
-            FOR (n:SentenceNode) ON n.embedding
+            FOR (n:Sentence) ON n.embedding
             OPTIONS {indexConfig: {`vector.dimensions`: 768}}
             """,
         )

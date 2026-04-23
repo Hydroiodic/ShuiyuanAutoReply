@@ -19,7 +19,7 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.database.mysql_mgr import global_async_mysql_manager
+from shuiyuan_auto_reply.database.mysql_mgr import global_async_mysql_manager
 
 
 async def init_database():
