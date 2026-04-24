@@ -25,6 +25,37 @@ async def execute_python_script(code: str) -> str:
     Please note that the user could not see the results of this tool directly,
     so the caller should surface it in the final answer.
 
+    NOTE: In the container, you are `nobody` user, and the current working directory is `/tmp`.
+        Network access is disabled, and the resources are limited to 128M to prevent abuse.
+        Each time this tool is called, it will start a new container, so the state will not be preserved across calls.
+        Thus, you should not expect to read/write files across different calls of this tool, and the code should be self-contained.
+        Also, any create/delete operations are safe to be executed.
+
+    Some usage examples:
+    - To calculate a simple expression:
+        `print(1 + 2 * 3)`
+    - To read a file named "data.txt" in the current working directory:
+        ```
+        with open("data.txt", "r") as f:
+            print(f.read())
+        ```
+    - To calculate the factorial of 5:
+        ```
+        def factorial(n):
+            if n == 0:
+                return 1
+            else:
+                return n * factorial(n - 1)
+        print(factorial(5))
+        ```
+    - To check if a string matches a pattern using regex:
+        ```
+        import re
+        pattern = r'^[a-zA-Z0-9_]+$'
+        test_string = 'valid_string123'
+        print(bool(re.match(pattern, test_string)))
+        ```
+
     Args:
         code: Python script as a string.
 
@@ -94,6 +125,24 @@ async def execute_bash_command(command: str) -> str:
     Executes the given Bash command inside a constrained Docker container.
     The output is captured from stdout/stderr.
     Note that the caller should surface it in the final answer.
+
+    NOTE: In the container, you are `nobody` user, and the current working directory is `/tmp`.
+        Network access is disabled, and the resources are limited to 128M to prevent abuse.
+        Each time this tool is called, it will start a new container, so the state will not be preserved across calls.
+        Thus, you should not expect to read/write files across different calls of this tool, and the code should be self-contained.
+        Also, any create/delete operations are safe to be executed.
+
+    Some usage examples:
+    - To get the current time (we are in Shanghai timezone):
+        `date +"%Y-%m-%d %H:%M:%S" -d "TZ=\"Asia/Shanghai\" now"`
+    - To list files in the current directory:
+        `ls -la`
+    - To check disk usage:
+        `df -h`
+    - To list all running processes:
+        `ps aux`
+    - To remove a directory named "temp" in the current working directory:
+        `rm -rf temp`
 
     Args:
         command: Bash command to run.
