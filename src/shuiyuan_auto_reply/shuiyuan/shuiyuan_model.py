@@ -597,7 +597,7 @@ class ShuiyuanModel:
 
     async def _search_post_details_by_optional_username_topic(
         self,
-        term: str,
+        term: str = "",
         latest: bool = False,
         username: Optional[str] = None,
         topic_id: Optional[int] = None,
@@ -635,7 +635,7 @@ class ShuiyuanModel:
 
     async def search_post_details_by_optional_username_topic(
         self,
-        term: str,
+        term: str = "",
         latest: bool = False,
         username: Optional[str] = None,
         topic_id: Optional[int] = None,
