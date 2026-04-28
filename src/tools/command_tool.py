@@ -104,7 +104,7 @@ async def execute_python_script(code: str) -> str:
         if exit_code != 0:
             return f"Execution Failed (Exit Code {exit_code}):\n{output}"
 
-        return output
+        return output[:256]
 
     except docker.errors.ContainerError as e:
         return f"Container Error: {str(e)}"
@@ -194,7 +194,7 @@ async def execute_bash_command(command: str) -> str:
         if exit_code != 0:
             return f"Execution Failed (Exit Code {exit_code}):\n{output}"
 
-        return output
+        return output[:256]
 
     except docker.errors.ContainerError as e:
         return f"Container Error: {str(e)}"

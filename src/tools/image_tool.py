@@ -53,12 +53,14 @@ def _extract_image_base64(response: Any) -> str:
 async def generate_image(text: str) -> str:
     """
     Generate an image from a text prompt with DashScope Qwen Image.
+    NOTE: The user cannot see how you generate the image, so you must add "![](image-url)"
+        (Markdown image format) in your final response.
 
     Args:
         text: The image prompt.
 
     Returns:
-        The generated image as a base64-encoded string.
+        The generated image URL.
     """
 
     messages = [
