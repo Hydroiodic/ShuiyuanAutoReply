@@ -1,8 +1,10 @@
 # command_tool.py, provide the tool to run command in a container
 
 import asyncio
-import docker
 import logging
+
+import docker
+
 from ..instance import mcp
 
 logger = logging.getLogger(__name__)

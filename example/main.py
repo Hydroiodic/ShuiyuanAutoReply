@@ -5,6 +5,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import dotenv
+
 from src.instance import mcp
 
 # Load environment variables from .env file
