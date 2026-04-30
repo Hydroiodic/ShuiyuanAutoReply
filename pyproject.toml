@@ -31,6 +31,9 @@ dependencies = [
     "sqlalchemy",
 ]
 
+[project.optional-dependencies]
+dev = ["black", "isort"]
+
 [tool.setuptools]
 include-package-data = true
 
@@ -40,6 +43,17 @@ include-package-data = true
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["shuiyuan_auto_reply*"]
+
+[tool.setuptools.package-data]
+shuiyuan_auto_reply = [
+    "assets/tarot_data.json",
+    "assets/tarot_img/*.jpg",
+    "assets/fonts/Noto_Color_Emoji/*.ttf",
+    "assets/fonts/Noto_Color_Emoji/*.txt",
+    "assets/fonts/Noto_Sans_SC/OFL.txt",
+    "assets/fonts/Noto_Sans_SC/static/NotoSansSC-Bold.ttf",
+    "assets/fonts/Noto_Sans_SC/static/NotoSansSC-Regular.ttf",
+]
 
 [tool.isort]
 profile = "black"

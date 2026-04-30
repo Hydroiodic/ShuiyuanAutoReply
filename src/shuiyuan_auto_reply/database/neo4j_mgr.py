@@ -1,18 +1,19 @@
-import os
-import asyncio
 import ast
+import asyncio
+import os
+from typing import List, Optional
 from urllib.parse import quote
+
 from neomodel import (
-    StructuredNode,
-    StringProperty,
-    DateTimeProperty,
     ArrayProperty,
+    DateTimeProperty,
     FloatProperty,
+    StringProperty,
+    StructuredNode,
     config,
     db,
 )
 from pydantic import BaseModel
-from typing import List, Optional
 from sentence_transformers import SentenceTransformer
 
 
