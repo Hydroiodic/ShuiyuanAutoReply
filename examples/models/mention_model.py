@@ -9,7 +9,7 @@ from shuiyuan_auto_reply.shuiyuan.objects import User, UserActionDetails
 from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 from shuiyuan_auto_reply.shuiyuan.user_action_model import BaseUserActionModel
 
-from .mention_google_model import MentionGeminiModel
+from .mention_openrouter_model import MentionOpenRouterModel
 
 
 class MentionModel(BaseUserActionModel):
@@ -25,7 +25,7 @@ class MentionModel(BaseUserActionModel):
         :param username: The username of the robot account.
         """
         super().__init__(model, username, [5, 7])
-        self.mention_google_model = MentionGeminiModel(model)
+        self.mention_openrouter_model = MentionOpenRouterModel(model)
         self.username = username
 
     @staticmethod
@@ -75,8 +75,8 @@ class MentionModel(BaseUserActionModel):
         if raw is None:
             return None
 
-        # Let the Gemini model respond based on conversation and similar responses
-        reply = await self.mention_google_model.get_pumpkin_response(
+        # Let the OpenRouter model respond based on conversation and similar responses
+        reply = await self.mention_openrouter_model.get_pumpkin_response(
             topic_id, raw, user
         )
         reply = f"{reply}\n\n（内容由AI生成，仅供参考）"
@@ -95,7 +95,7 @@ class MentionModel(BaseUserActionModel):
             return None
 
         # Clear the session history for the user
-        self.mention_google_model.clear_session_history(topic_id)
+        self.mention_openrouter_model.clear_session_history(topic_id)
 
         return MentionModel._make_unique_reply("已清除当前话题中的对话历史记录")
 

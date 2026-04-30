@@ -14,9 +14,10 @@ from pydantic import BaseModel
 # Add the parent directory to the system path for module resolution
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from example.models.mention_google_model import MentionGeminiModel
+from models.mention_openrouter_model import MentionOpenRouterModel
 
 from shuiyuan_auto_reply.shuiyuan.objects import User
+from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -35,7 +36,8 @@ class SessionData:
 
 # Session dict in memory with structure { session_id: SessionData }
 active_sessions: Dict[str, SessionData] = {}
-bot_instance: Optional[MentionGeminiModel] = None
+shuiyuan_model: Optional[ShuiyuanModel] = None
+bot_instance: Optional[MentionOpenRouterModel] = None
 
 
 # Pydantic models for request and response validation
@@ -63,30 +65,34 @@ class ClearResponse(BaseModel):
 # Lifespan function to handle startup and shutdown events
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global bot_instance
+    global bot_instance, shuiyuan_model
     logger.info("正在加载环境变量...")
     load_dotenv()
 
-    if not os.getenv("GOOGLE_API_KEY"):
-        logger.error("❌ 错误: 未检测到 GOOGLE_API_KEY，请检查 .env 文件。")
-        raise RuntimeError("Missing GOOGLE_API_KEY")
+    if not os.getenv("OPENROUTER_API_KEY"):
+        logger.error("错误: 未检测到 OPENROUTER_API_KEY，请检查 .env 文件。")
+        raise RuntimeError("Missing OPENROUTER_API_KEY")
 
-    logger.info("🔄 正在初始化模型 (连接 Neo4j 和 Gemini)...")
+    logger.info("正在初始化模型 (连接水源、Neo4j 和 OpenRouter)...")
     try:
-        bot_instance = MentionGeminiModel()
-        logger.info("✅ 机器人初始化成功！")
+        shuiyuan_model = await ShuiyuanModel.create()
+        bot_instance = MentionOpenRouterModel(shuiyuan_model)
+        logger.info("机器人初始化成功！")
     except Exception as e:
-        logger.error(f"❌ 初始化失败: {e}")
+        logger.error(f"初始化失败: {e}")
         raise RuntimeError(f"Bot initialization failed: {e}")
 
     yield
 
-    logger.info("👋 正在关闭应用，清理资源...")
+    logger.info("正在关闭应用，清理资源...")
+    if shuiyuan_model is not None:
+        await shuiyuan_model.close()
+        shuiyuan_model = None
     bot_instance = None
 
 
 # Initialize FastAPI app with lifespan and CORS middleware
-app = FastAPI(title="小南瓜 (Gemini) 对话后端", lifespan=lifespan)
+app = FastAPI(title="小南瓜 (OpenRouter) 对话后端", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -137,7 +143,7 @@ async def chat_endpoint(request: ChatRequest):
 
     try:
         # 2. Call the bot instance to get a reply based on the user's message and session info
-        reply = await bot_instance.get_pumpkin_response(request.message, user)
+        reply = await bot_instance.get_pumpkin_response(0, request.message, user)
         return ChatResponse(session_id=session_id, reply=reply)
     except Exception as e:
         logger.error(f"处理消息时发生错误: {e}", exc_info=True)

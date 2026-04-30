@@ -20,7 +20,7 @@ from shuiyuan_auto_reply.tarot.tarot_group_data import (
 )
 from shuiyuan_auto_reply.tarot.tarot_model import TarotModel
 
-from .tarot_tongyi_model import TarotTongyiModel
+from .tarot_openrouter_model import TarotOpenRouterModel
 
 
 class TarotTopicModel(BaseTopicModel):
@@ -36,7 +36,7 @@ class TarotTopicModel(BaseTopicModel):
         :param topic_id: The ID of the topic to be managed.
         """
         super().__init__(model, topic_id)
-        self.tongyi_model = TarotTongyiModel()
+        self.openrouter_model = TarotOpenRouterModel()
         self.tarot_model = TarotModel(
             tarot_data_path=os.path.join(assets_directory, "tarot_data.json"),
             tarot_img_path=os.path.join(assets_directory, "tarot_img"),
@@ -118,9 +118,9 @@ class TarotTopicModel(BaseTopicModel):
             raw.replace("【塔罗牌】", "")
         )
 
-        # Let GPT tell us the meaning of the tarot cards
+        # Let OpenRouter tell us the meaning of the tarot cards
         text = '---\n\n[details="分析和建议"]\n'
-        text += await self.tongyi_model.consult_tarot_card(
+        text += await self.openrouter_model.consult_tarot_card(
             raw.replace("【塔罗牌】", ""), tarot_group
         )
         text += "\n[/details]\n"

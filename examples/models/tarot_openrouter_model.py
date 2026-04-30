@@ -1,16 +1,20 @@
 from typing import Optional
 
+from shuiyuan_auto_reply.openrouter.openrouter_model import (
+    BaseOpenRouterModel,
+    openrouter_model,
+)
 from shuiyuan_auto_reply.tarot.tarot_group_data import BaseTarotGroup
-from shuiyuan_auto_reply.tongyi.tongyi_model import BaseTongyiModel
 
 
-class TarotTongyiModel(BaseTongyiModel):
+class TarotOpenRouterModel(BaseOpenRouterModel):
     """
-    A model for managing Tongyi Qianwen data.
+    A model for generating tarot readings through OpenRouter.
     """
 
     def __init__(self):
         super().__init__()
+        self.model = openrouter_model("OPENROUTER_TAROT_MODEL")
 
     async def consult_tarot_card(
         self,
@@ -31,10 +35,8 @@ class TarotTongyiModel(BaseTongyiModel):
 
         # Create a chat completion request with the tarot results and question
         response = await self.client.chat.completions.create(
-            model="deepseek-v3.2",
-            extra_body={
-                "enable_thinking": False,
-            },
+            model=self.model,
+            temperature=0.8,
             messages=[
                 {
                     "role": "system",

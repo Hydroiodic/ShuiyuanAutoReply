@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "shuiyuan-auto-reply"
 version = "0.1.0"
-description = "A project for automatic replies using LangChain and Google GenAI."
+description = "A project for automatic replies using LangChain and OpenRouter."
 authors = [{ name = "Hydroiodic_Acid", email = "liao_chengfan@sjtu.edu.cn" }]
 requires-python = ">=3.12"
 dependencies = [
@@ -13,11 +13,10 @@ dependencies = [
     "aiomysql",
     "apscheduler",
     "dacite",
-    "dashscope",
     "ddgs",
     "httpx[socks]",
     "langchain-community",
-    "langchain-google-genai",
+    "langchain-openai",
     "langchain-mcp-adapters",
     "neomodel",
     "numpy",

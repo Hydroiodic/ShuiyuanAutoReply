@@ -144,6 +144,7 @@ class MentionChatModel:
         function_list = [
             "search_user_by_term",
             "search_post_details_by_optional_username_topic",
+            "query_recent_posts_by_topic_id",
         ]
 
         # Dynamically create tool wrappers for the above functions

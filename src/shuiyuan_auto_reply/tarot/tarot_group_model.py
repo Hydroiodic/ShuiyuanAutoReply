@@ -1,18 +1,19 @@
 from typing import Optional
 
-from ..tongyi.tongyi_model import BaseTongyiModel
+from ..openrouter.openrouter_model import BaseOpenRouterModel, openrouter_model
 from .tarot_group_data import tarot_groups
 
 _tarot_info_str: Optional[str] = None
 
 
-class TarotGroupModel(BaseTongyiModel):
+class TarotGroupModel(BaseOpenRouterModel):
     """
     A model for choosing which tarot group to use.
     """
 
     def __init__(self):
         super().__init__()
+        self.model = openrouter_model("OPENROUTER_TAROT_GROUP_MODEL")
 
     @staticmethod
     def _get_tarot_info_str() -> str:
@@ -33,10 +34,9 @@ class TarotGroupModel(BaseTongyiModel):
         """
         # Create a chat completion request with the tarot group info and question
         response = await self.client.chat.completions.create(
-            model="qwen-flash-2025-07-28",
-            extra_body={
-                "enable_thinking": False,
-            },
+            model=self.model,
+            temperature=0,
+            max_tokens=64,
             messages=[
                 {
                     "role": "system",
