@@ -1,5 +1,6 @@
 from typing import List, Optional
 
+from shuiyuan_auto_reply.openrouter.image_tool import OpenRouterImageTool
 from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 
 from .shuiyuan_tools_objects import PostShort, UserShort
@@ -12,6 +13,7 @@ class ShuiyuanToolsWrapper:
 
     def __init__(self, shuiyuan_model: ShuiyuanModel):
         self.shuiyuan_model = shuiyuan_model
+        self.image_tool = OpenRouterImageTool(shuiyuan_model)
 
     async def search_user_by_term(self, term: str) -> List[UserShort]:
         """
@@ -65,3 +67,17 @@ class ShuiyuanToolsWrapper:
             topic_id, limit
         )
         return [PostShort(post) for post in posts]
+
+    async def generate_image_and_upload(self, prompt: str) -> str:
+        """
+        Generate an image from a prompt and then return the Shuiyuan short URL.
+        NOTE: To show this image in your reply, you have to use Markdown format like `![image]({short_url})`.
+
+        :param prompt: The prompt to generate the image from.
+        :return: The short URL of the uploaded image on Shuiyuan.
+        """
+        return await self.image_tool.generate_and_upload(
+            prompt,
+            output_dir="generated_images",
+            image_size="1K",
+        )
