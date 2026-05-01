@@ -467,6 +467,261 @@ class GypsyCrossGroup(BaseTarotGroup):
         }
 
 
+class SingleCardGuidanceGroup(BaseTarotGroup):
+    def __init__(self):
+        super().__init__(
+            "单牌指引",
+            "该牌阵由1张牌组成，适合快速确认当下最需要关注的核心信息。",
+        )
+        self.tarot_results = []
+        self.card_count = 1
+
+    def __str__(self) -> str:
+        text = self.base_info()
+        text += "抽牌结果如下：\n\n"
+        text += "核心指引：\n"
+        text += f"{self._get_card_text(self.tarot_results[0])}\n\n"
+
+        return text
+
+    def query_prompt(self):
+        text = str(self)
+        text += (
+            "解读思路：单牌不做复杂推演，重点说明这张牌对当前问题最直接的提醒、"
+            "可采取的行动，以及需要避免的误区。"
+        )
+        return text
+
+    @classmethod
+    def get_keywords(cls) -> Dict[str, float]:
+        return {
+            "单牌": 1.0,
+            "指引": 0.8,
+            "建议": 0.7,
+            "提醒": 0.7,
+            "今天": 0.7,
+            "今日": 0.7,
+            "此刻": 0.6,
+            "快速": 0.5,
+            "抽一张": 1.0,
+            "一张": 0.8,
+        }
+
+
+class ChoiceTarotGroup(BaseTarotGroup):
+    def __init__(self):
+        super().__init__(
+            "二择一",
+            "该牌阵由5张牌组成，适合在两个选项之间做比较，"
+            "分别代表选项A的发展、选项A的风险、选项B的发展、选项B的风险和内在取舍。",
+        )
+        self.tarot_results = []
+        self.card_count = 5
+
+    def __str__(self) -> str:
+        text = self.base_info()
+        text += "抽牌结果如下：\n\n"
+
+        text += "选项A的发展：\n"
+        text += f"{self._get_card_text(self.tarot_results[0])}\n"
+        text += "选项A的风险：\n"
+        text += f"{self._get_card_text(self.tarot_results[1])}\n"
+        text += "选项B的发展：\n"
+        text += f"{self._get_card_text(self.tarot_results[2])}\n"
+        text += "选项B的风险：\n"
+        text += f"{self._get_card_text(self.tarot_results[3])}\n"
+        text += "内在取舍：\n"
+        text += f"{self._get_card_text(self.tarot_results[4])}\n\n"
+
+        return text
+
+    def query_prompt(self):
+        text = str(self)
+        text += (
+            "解读思路：分别比较A、B两个路径的机会与风险，最后用第五张牌总结问卜者真正重视的价值。"
+            "不要直接替问卜者做决定，而是给出判断依据。"
+        )
+        return text
+
+    @classmethod
+    def get_keywords(cls) -> Dict[str, float]:
+        return {
+            "二择一": 1.0,
+            "选择": 0.9,
+            "选哪个": 1.0,
+            "哪个": 0.8,
+            "还是": 0.8,
+            "或者": 0.8,
+            "方案": 0.7,
+            "比较": 0.7,
+            "取舍": 0.8,
+            "决定": 0.8,
+            "纠结": 0.8,
+        }
+
+
+class FiveElementsGroup(BaseTarotGroup):
+    def __init__(self):
+        super().__init__(
+            "五元素",
+            "该牌阵由5张牌组成，从火、水、风、土和中心能量五个角度分析问题的动力、情绪、思路、现实基础和核心平衡。",
+        )
+        self.tarot_results = []
+        self.card_count = 5
+
+    def __str__(self) -> str:
+        text = self.base_info()
+        text += "抽牌结果如下：\n\n"
+
+        text += "火元素（行动与动力）：\n"
+        text += f"{self._get_card_text(self.tarot_results[0])}\n"
+        text += "水元素（情绪与关系）：\n"
+        text += f"{self._get_card_text(self.tarot_results[1])}\n"
+        text += "风元素（思路与沟通）：\n"
+        text += f"{self._get_card_text(self.tarot_results[2])}\n"
+        text += "土元素（资源与现实）：\n"
+        text += f"{self._get_card_text(self.tarot_results[3])}\n"
+        text += "中心能量（整体平衡）：\n"
+        text += f"{self._get_card_text(self.tarot_results[4])}\n\n"
+
+        return text
+
+    def query_prompt(self):
+        text = str(self)
+        text += (
+            "解读思路：按行动、情绪、思路、现实资源和整体平衡五个维度分析，"
+            "指出哪一类能量过强或不足，并给出调整建议。"
+        )
+        return text
+
+    @classmethod
+    def get_keywords(cls) -> Dict[str, float]:
+        return {
+            "五元素": 1.0,
+            "元素": 0.8,
+            "平衡": 0.8,
+            "整体": 0.6,
+            "综合": 0.6,
+            "状态": 0.5,
+            "能量": 0.7,
+            "资源": 0.5,
+        }
+
+
+class HorseshoeGroup(BaseTarotGroup):
+    def __init__(self):
+        super().__init__(
+            "马蹄牌阵",
+            "该牌阵由7张牌组成，适合分析较复杂的处境，分别代表过去、现在、隐藏影响、阻碍、外部影响、建议和结果。",
+        )
+        self.tarot_results = []
+        self.card_count = 7
+
+    def __str__(self) -> str:
+        text = self.base_info()
+        text += "抽牌结果如下：\n\n"
+
+        text += "过去影响：\n"
+        text += f"{self._get_card_text(self.tarot_results[0])}\n"
+        text += "当前状态：\n"
+        text += f"{self._get_card_text(self.tarot_results[1])}\n"
+        text += "隐藏影响：\n"
+        text += f"{self._get_card_text(self.tarot_results[2])}\n"
+        text += "主要阻碍：\n"
+        text += f"{self._get_card_text(self.tarot_results[3])}\n"
+        text += "外部影响：\n"
+        text += f"{self._get_card_text(self.tarot_results[4])}\n"
+        text += "建议行动：\n"
+        text += f"{self._get_card_text(self.tarot_results[5])}\n"
+        text += "可能结果：\n"
+        text += f"{self._get_card_text(self.tarot_results[6])}\n\n"
+
+        return text
+
+    def query_prompt(self):
+        text = str(self)
+        text += (
+            "解读思路：先说明过去与现在如何形成当前局面，再区分隐藏因素、阻碍和外部影响，"
+            "最后结合建议牌给出通向结果牌的行动路径。"
+        )
+        return text
+
+    @classmethod
+    def get_keywords(cls) -> Dict[str, float]:
+        return {
+            "马蹄": 1.0,
+            "复杂": 0.8,
+            "局面": 0.7,
+            "处境": 0.7,
+            "隐藏": 0.8,
+            "影响": 0.6,
+            "外部": 0.6,
+            "阻碍": 0.7,
+            "长期": 0.5,
+        }
+
+
+class CelticCrossGroup(BaseTarotGroup):
+    def __init__(self):
+        super().__init__(
+            "凯尔特十字",
+            "该牌阵由10张牌组成，适合深入分析复杂或长期问题，覆盖现状、挑战、意识、潜意识、过去、未来、自我、环境、希望恐惧和结果。",
+        )
+        self.tarot_results = []
+        self.card_count = 10
+
+    def __str__(self) -> str:
+        text = self.base_info()
+        text += "抽牌结果如下：\n\n"
+
+        text += "现状：\n"
+        text += f"{self._get_card_text(self.tarot_results[0])}\n"
+        text += "挑战：\n"
+        text += f"{self._get_card_text(self.tarot_results[1])}\n"
+        text += "显意识目标：\n"
+        text += f"{self._get_card_text(self.tarot_results[2])}\n"
+        text += "潜意识根基：\n"
+        text += f"{self._get_card_text(self.tarot_results[3])}\n"
+        text += "过去影响：\n"
+        text += f"{self._get_card_text(self.tarot_results[4])}\n"
+        text += "近期未来：\n"
+        text += f"{self._get_card_text(self.tarot_results[5])}\n"
+        text += "自我态度：\n"
+        text += f"{self._get_card_text(self.tarot_results[6])}\n"
+        text += "外部环境：\n"
+        text += f"{self._get_card_text(self.tarot_results[7])}\n"
+        text += "希望与恐惧：\n"
+        text += f"{self._get_card_text(self.tarot_results[8])}\n"
+        text += "最终结果：\n"
+        text += f"{self._get_card_text(self.tarot_results[9])}\n\n"
+
+        return text
+
+    def query_prompt(self):
+        text = str(self)
+        text += (
+            "解读思路：凯尔特十字需要先读中心两张牌的现状与挑战，再用意识/潜意识、过去/未来、"
+            "自我/环境三组关系交叉验证，最后谨慎总结希望恐惧与结果。"
+        )
+        return text
+
+    @classmethod
+    def get_keywords(cls) -> Dict[str, float]:
+        return {
+            "凯尔特": 1.0,
+            "十字": 0.8,
+            "深入": 0.8,
+            "详细": 0.8,
+            "全面": 0.8,
+            "长期": 0.7,
+            "复杂": 0.8,
+            "大事": 0.7,
+            "人生": 0.5,
+            "事业": 0.6,
+            "未来规划": 0.7,
+        }
+
+
 tarot_groups: List[Type[BaseTarotGroup]] = [
     TimeTarotGroup,
     YesOrNoGroup,
@@ -475,4 +730,9 @@ tarot_groups: List[Type[BaseTarotGroup]] = [
     LoverPyramidGroup,
     SelfExplorationGroup,
     GypsyCrossGroup,
+    SingleCardGuidanceGroup,
+    ChoiceTarotGroup,
+    FiveElementsGroup,
+    HorseshoeGroup,
+    CelticCrossGroup,
 ]
