@@ -99,12 +99,12 @@ async def execute_python_script(code: str) -> str:
 
         exit_code = wait_result.get("StatusCode", 0)
         logs = await loop.run_in_executor(None, container.logs)
-        output = logs.decode("utf-8").strip()
+        output = logs.decode("utf-8").strip()[:256]
 
         if exit_code != 0:
             return f"Execution Failed (Exit Code {exit_code}):\n{output}"
 
-        return output[:256]
+        return output
 
     except docker.errors.ContainerError as e:
         return f"Container Error: {str(e)}"
@@ -189,12 +189,12 @@ async def execute_bash_command(command: str) -> str:
 
         exit_code = wait_result.get("StatusCode", 0)
         logs = await loop.run_in_executor(None, container.logs)
-        output = logs.decode("utf-8").strip()
+        output = logs.decode("utf-8").strip()[:256]
 
         if exit_code != 0:
             return f"Execution Failed (Exit Code {exit_code}):\n{output}"
 
-        return output[:256]
+        return output
 
     except docker.errors.ContainerError as e:
         return f"Container Error: {str(e)}"
