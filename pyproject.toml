@@ -3,12 +3,19 @@ name = "mcp-server"
 version = "0.1.0"
 description = "MCP Server for ShuiyuanAutoReply"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 dependencies = [
-    "black>=26.3.1",
-    "dashscope>=1.25.0",
     "docker>=7.1.0",
     "isort>=8.0.1",
     "mcp[cli]>=1.25.0",
+    "openai>=2.33.0",
     "python-dotenv>=1.2.1",
 ]
+
+# Optional dependencies
+[project.optional-dependencies]
+dev = ["black", "isort"]
+img = ["shuiyuan-auto-reply"]
+
+[tool.uv.sources]
+shuiyuan-auto-reply = { path = "assets/shuiyuan_auto_reply-0.1.0-py3-none-any.whl" }
