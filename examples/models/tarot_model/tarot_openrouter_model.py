@@ -37,9 +37,6 @@ class TarotOpenRouterModel(BaseOpenRouterModel):
         response = await self.client.chat.completions.create(
             model=self.model,
             temperature=0.8,
-            extra_body={
-                "provider": {"only": ["Google AI Studio"]},
-            },
             messages=[
                 {
                     "role": "system",

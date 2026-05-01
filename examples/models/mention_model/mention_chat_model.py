@@ -24,7 +24,7 @@ from shuiyuan_auto_reply.constants import auto_reply_tag
 from shuiyuan_auto_reply.shuiyuan.objects import PostDetails, User
 from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 
-from .shuiyuan_tools_wrapper import ShuiyuanToolsWrapper, PostShort
+from .shuiyuan_tools_wrapper import PostShort, ShuiyuanToolsWrapper
 
 
 class M3EEmbeddings(Embeddings):
@@ -129,6 +129,7 @@ class MentionChatModel:
                 "default": {
                     "transport": "http",
                     "url": url,
+                    "sse_read_timeout": 900,  # Image generation may take long
                 }
             }
         )

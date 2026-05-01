@@ -32,6 +32,7 @@ class MentionOpenRouterModel(MentionChatModel):
             base_url=OPENROUTER_BASE_URL,
             temperature=0.8,
             default_headers=openrouter_headers(),
+            max_retries=5,
         )
 
     def parse_model_output(self, raw_output: Any) -> str:
