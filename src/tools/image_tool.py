@@ -1,5 +1,7 @@
 import base64
+import logging
 import os
+import traceback
 from typing import Optional
 
 import shuiyuan_auto_reply.openrouter.openrouter_model
@@ -44,6 +46,7 @@ async def generate_image(text: str) -> str:
     client = AsyncOpenAI(
         api_key=api_key,
         base_url=base_url,
+        max_retries=5,
     )
 
     try:
@@ -51,10 +54,9 @@ async def generate_image(text: str) -> str:
         response = await client.images.generate(
             prompt=text,
             model="gpt-image-2",
-            n=1,
-            size="1024x1024",
-            quality="high",
             output_format="jpeg",
+            moderation="low",
+            n=1,
         )
         base64_image = response.data[0].b64_json
         decoded_image = base64.b64decode(base64_image)
@@ -68,4 +70,5 @@ async def generate_image(text: str) -> str:
         return (await shuiyuan_model.upload_image(decoded_image)).short_url
 
     except Exception as exc:
+        logging.error(f"Error generating image: {traceback.format_exc()}")
         return f"Error: {exc}"
