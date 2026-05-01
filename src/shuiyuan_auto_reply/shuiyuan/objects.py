@@ -71,6 +71,23 @@ class PostSearchResult:
 
 
 @dataclass
+class TopicSearchResult:
+    """
+    Represents a search result for a topic.
+    """
+
+    id: int
+    title: str
+    fancy_title: str
+    slug: str
+    posts_count: int
+    reply_count: int
+    highest_post_number: int
+    created_at: str
+    last_posted_at: str
+
+
+@dataclass
 class PostDetails:
     """
     Represents the details of a post in a topic.

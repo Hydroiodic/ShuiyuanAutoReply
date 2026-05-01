@@ -5,6 +5,7 @@ Only important information for LLM is kept here.
 from typing import Optional
 
 from shuiyuan_auto_reply.shuiyuan.objects import PostDetails, User
+from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 
 
 class UserShort:
@@ -33,8 +34,9 @@ class PostShort:
     cooked: str
     raw: Optional[str]
     reply_to_post_number: Optional[int]
+    title: str
 
-    def __init__(self, post: PostDetails):
+    def __init__(self, post: PostDetails, title: str):
         self.id = post.id
         self.post_number = post.post_number
         self.topic_id = post.topic_id
@@ -43,12 +45,14 @@ class PostShort:
         self.cooked = post.cooked[:192]
         self.raw = post.raw[:192] if post.raw else None
         self.reply_to_post_number = post.reply_to_post_number
+        self.title = title
 
     def __str__(self):
         return (
             f"PostMeta: id={self.id}, post_number={self.post_number}, topic_id={self.topic_id}\n"
             f"FromUser: {self.username}{f' ({self.name})' if self.name else ''}\n"
-            f"Content: {self.raw if self.raw else self.cooked}\n"
+            f"TopicTitle: {self.title}\n"
+            f"Content: {ShuiyuanModel.remove_shuiyuan_signature(self.raw) if self.raw else self.cooked}\n"
         )
 
     def __repr__(self):

@@ -41,7 +41,7 @@ class ShuiyuanToolsWrapper:
         :param topic_id: An optional topic ID to filter posts by. Default is None.
         :return: A list of PostShort instances matching the search criteria.
         """
-        posts = (
+        posts_dict = (
             await self.shuiyuan_model.search_post_details_by_optional_username_topic(
                 term,
                 latest,
@@ -49,7 +49,11 @@ class ShuiyuanToolsWrapper:
                 topic_id,
             )
         )
-        return [PostShort(post) for post in posts]
+        return [
+            PostShort(post, title)
+            for title, post_list in posts_dict.items()
+            for post in post_list
+        ]
 
     async def query_recent_posts_by_topic_id(
         self,
@@ -63,10 +67,10 @@ class ShuiyuanToolsWrapper:
         :param limit: The maximum number of recent posts to retrieve. Default is 10.
         :return: A list of PostShort instances for the recent posts in the topic.
         """
-        posts = await self.shuiyuan_model.query_recent_posts_by_topic_id(
+        title, posts = await self.shuiyuan_model.query_recent_posts_by_topic_id(
             topic_id, limit
         )
-        return [PostShort(post) for post in posts]
+        return [PostShort(post, title) for post in posts]
 
     async def generate_image_and_upload(self, prompt: str) -> str:
         """

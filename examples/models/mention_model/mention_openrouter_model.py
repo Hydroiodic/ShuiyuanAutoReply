@@ -1,7 +1,5 @@
-import asyncio
-import logging
 import os
-from typing import Any, Optional, override
+from typing import Any
 
 from langchain_openai import ChatOpenAI
 
@@ -10,7 +8,7 @@ from shuiyuan_auto_reply.openrouter.openrouter_model import (
     openrouter_headers,
     openrouter_model,
 )
-from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel, User
+from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 
 from .mention_chat_model import MentionChatModel
 
@@ -58,21 +56,3 @@ class MentionOpenRouterModel(MentionChatModel):
                 if isinstance(item, str):
                     res += item
         return res.strip()
-
-    @override
-    async def get_pumpkin_response(
-        self, topic_id: int, conversation: str, user: User
-    ) -> Optional[str]:
-        # Retry for a maximum of 5 attempts with a delay between retries
-        retry_count = 5
-        for _ in range(retry_count):
-            try:
-                return await asyncio.wait_for(
-                    super().get_pumpkin_response(topic_id, conversation, user),
-                    timeout=60.0,
-                )
-            except Exception as e:
-                logging.warning(f"Error getting response: {e}. Retrying...")
-                await asyncio.sleep(10)
-        # If all retries fail, raise an exception
-        raise RuntimeError(f"Failed to get response after {retry_count} attempts")

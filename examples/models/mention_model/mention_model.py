@@ -29,17 +29,6 @@ class MentionModel(BaseUserActionModel):
         self.username = username
 
     @staticmethod
-    def _remove_shuiyuan_signature(text: str) -> str:
-        """
-        Remove the Shuiyuan signature from the given text.
-
-        :param text: The text from which to remove the signature.
-        :return: The text without the signature.
-        """
-        sig_re = r"<div data-signature>.*?</div>"
-        return re.sub(sig_re, "", text, flags=re.DOTALL).strip()
-
-    @staticmethod
     def _parse_prompt_text(raw: str, prompt: str) -> Optional[str]:
         """
         Return text after the first occurrence of the prompt in raw.
@@ -56,8 +45,7 @@ class MentionModel(BaseUserActionModel):
         raw = raw[irst_occurrence:]
 
         # Remove the keyword itself
-        raw = MentionModel._remove_shuiyuan_signature(raw.replace(prompt, "")).strip()
-        return raw
+        return ShuiyuanModel.remove_shuiyuan_signature(raw.replace(prompt, "")).strip()
 
     async def _pumpkin_condition(
         self, topic_id: int, raw: str, user: User
