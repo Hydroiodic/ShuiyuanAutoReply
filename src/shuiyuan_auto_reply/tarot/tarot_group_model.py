@@ -12,7 +12,7 @@ class TarotGroupModel(BaseOpenRouterModel):
     """
 
     def __init__(self):
-        super().__init__()
+        super().__init__(max_retries=5)
         self.model = openrouter_model("OPENROUTER_TAROT_GROUP_MODEL")
 
     @staticmethod
@@ -38,6 +38,7 @@ class TarotGroupModel(BaseOpenRouterModel):
             temperature=0,
             extra_body={
                 "enable_thinking": False,
+                "provider": {"only": ["Google AI Studio"]},
             },
             messages=[
                 {
@@ -60,7 +61,6 @@ class TarotGroupModel(BaseOpenRouterModel):
                 },
             ],
         )
-        print(response)
 
         # Return the content of the first choice in the response
         return response.choices[0].message.content

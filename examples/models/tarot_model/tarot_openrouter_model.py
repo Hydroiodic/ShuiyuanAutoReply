@@ -13,7 +13,7 @@ class TarotOpenRouterModel(BaseOpenRouterModel):
     """
 
     def __init__(self):
-        super().__init__()
+        super().__init__(max_retries=5)
         self.model = openrouter_model("OPENROUTER_TAROT_MODEL")
 
     async def consult_tarot_card(
@@ -37,6 +37,9 @@ class TarotOpenRouterModel(BaseOpenRouterModel):
         response = await self.client.chat.completions.create(
             model=self.model,
             temperature=0.8,
+            extra_body={
+                "provider": {"only": ["Google AI Studio"]},
+            },
             messages=[
                 {
                     "role": "system",

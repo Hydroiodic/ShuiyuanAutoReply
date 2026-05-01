@@ -53,6 +53,7 @@ class BaseOpenRouterModel:
         *,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
+        max_retries: int = 2,
     ):
         api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         if not api_key:
@@ -62,4 +63,5 @@ class BaseOpenRouterModel:
             api_key=api_key,
             base_url=base_url or OPENROUTER_BASE_URL,
             default_headers=openrouter_headers(),
+            max_retries=max_retries,
         )
