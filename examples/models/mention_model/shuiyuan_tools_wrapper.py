@@ -1,8 +1,8 @@
 from typing import List, Optional
 
-from .shuiyuan_tools_objects import PostShort, UserShort
-
 from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
+
+from .shuiyuan_tools_objects import PostShort, UserShort
 
 
 class ShuiyuanToolsWrapper:

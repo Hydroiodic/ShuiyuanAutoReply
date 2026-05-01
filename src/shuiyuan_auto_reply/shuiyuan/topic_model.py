@@ -27,6 +27,7 @@ class BaseTopicModel:
         self.topic_id = topic_id
         self.stream_list = []
         self.scheduler = AsyncIOScheduler()
+        self._bg_tasks = set()
 
     @staticmethod
     def _generate_random_string(length: int) -> str:
@@ -110,9 +111,15 @@ class BaseTopicModel:
                 start_index = new_stream.index(last_stream) + 1
                 new_posts = new_stream[start_index:]
 
-                # OK, we have find the new posts, we should do some routine with them
-                routines = [self._new_post_routine(post_id) for post_id in new_posts]
-                await asyncio.gather(*routines, return_exceptions=True)
+                # OK, we have found the new posts — start each routine as a
+                # background task so the watcher loop doesn't block waiting
+                # for them to finish.
+                for post_id in new_posts:
+                    task = asyncio.create_task(self._new_post_routine(post_id))
+                    # keep a reference so tasks aren't garbage-collected
+                    self._bg_tasks.add(task)
+                    # remove task from the set when done
+                    task.add_done_callback(lambda t, s=self._bg_tasks: s.discard(t))
 
             # Update the stream list with the new stream
             self.stream_list = new_stream

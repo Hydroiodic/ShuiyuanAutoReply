@@ -27,6 +27,7 @@ class BaseUserActionModel:
         self.username = username
         self.action_type = action_type
         self.stream_list = []
+        self._bg_tasks = set()
 
     @staticmethod
     def _generate_random_string(length: int) -> str:
@@ -103,8 +104,12 @@ class BaseUserActionModel:
             new_actions = action_details[:last_post_index]
 
             # OK, we have find the new posts, we should do some routine with them
-            routines = [self._new_action_routine(mention) for mention in new_actions]
-            await asyncio.gather(*routines, return_exceptions=True)
+            for mention in new_actions:
+                task = asyncio.create_task(self._new_action_routine(mention))
+                # keep a reference so tasks aren't garbage-collected
+                self._bg_tasks.add(task)
+                # remove task from the set when done
+                task.add_done_callback(lambda t, s=self._bg_tasks: s.discard(t))
 
             # Update the stream list with the new stream
             self.stream_list = new_stream

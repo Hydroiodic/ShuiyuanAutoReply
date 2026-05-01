@@ -36,7 +36,9 @@ class TarotGroupModel(BaseOpenRouterModel):
         response = await self.client.chat.completions.create(
             model=self.model,
             temperature=0,
-            max_tokens=64,
+            extra_body={
+                "enable_thinking": False,
+            },
             messages=[
                 {
                     "role": "system",
@@ -58,6 +60,7 @@ class TarotGroupModel(BaseOpenRouterModel):
                 },
             ],
         )
+        print(response)
 
         # Return the content of the first choice in the response
         return response.choices[0].message.content

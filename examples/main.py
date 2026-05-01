@@ -13,12 +13,13 @@ logging.basicConfig(
 # Load all environment variables from the .env file
 dotenv.load_dotenv()
 
-from examples.models.mention_model.mention_model import MentionModel
-from examples.models.record_model.record_topic_model import RecordTopicModel
-from examples.models.stock_model.stock_topic_model import StockTopicModel
-from examples.models.tarot_model.tarot_topic_model import TarotTopicModel
 from shuiyuan_auto_reply.shuiyuan.objects import TimeInADay
 from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
+
+from .models.mention_model.mention_model import MentionModel
+from .models.record_model.record_topic_model import RecordTopicModel
+from .models.stock_model.stock_topic_model import StockTopicModel
+from .models.tarot_model.tarot_topic_model import TarotTopicModel
 
 
 async def main():
