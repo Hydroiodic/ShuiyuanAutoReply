@@ -27,6 +27,7 @@ from openai import AsyncOpenAI
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_OPENROUTER_MODEL = "google/gemini-3.1-flash-lite-preview"
+DEFAULT_OPENROUTER_MAX_RETRIES = 5
 OPENROUTER_APP_REFERER = "https://github.com/Hydroiodic/ShuiyuanAutoReply"
 OPENROUTER_APP_TITLE = "ShuiyuanAutoReply"
 
@@ -53,7 +54,7 @@ class BaseOpenRouterModel:
         *,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
-        max_retries: int = 2,
+        max_retries: int = DEFAULT_OPENROUTER_MAX_RETRIES,
     ):
         api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         if not api_key:

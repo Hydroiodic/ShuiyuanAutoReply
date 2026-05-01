@@ -21,6 +21,9 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from sentence_transformers import SentenceTransformer
 
 from shuiyuan_auto_reply.constants import auto_reply_tag
+from shuiyuan_auto_reply.openrouter.openrouter_model import (
+    DEFAULT_OPENROUTER_MAX_RETRIES,
+)
 from shuiyuan_auto_reply.shuiyuan.objects import PostDetails, User
 from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 
@@ -148,6 +151,7 @@ class MentionChatModel:
             "search_user_by_term",
             "search_post_details_by_optional_username_topic",
             "query_recent_posts_by_topic_id",
+            "generate_image_and_upload",
         ]
 
         # Dynamically create tool wrappers for the above functions
@@ -192,7 +196,9 @@ class MentionChatModel:
 
         # Create the agent with both MCP tools and Shuiyuan tools
         all_tools = mcp_tools + shuiyuan_tools + [ddg_search_tool]
-        agent = create_tool_calling_agent(self.llm, all_tools, self.prompt)
+        agent = create_tool_calling_agent(self.llm, all_tools, self.prompt).with_retry(
+            stop_after_attempt=DEFAULT_OPENROUTER_MAX_RETRIES
+        )
         self.agent_executor = AgentExecutor(
             agent=agent,
             tools=all_tools,

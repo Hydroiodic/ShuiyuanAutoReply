@@ -4,6 +4,7 @@ from typing import Any
 from langchain_openai import ChatOpenAI
 
 from shuiyuan_auto_reply.openrouter.openrouter_model import (
+    DEFAULT_OPENROUTER_MAX_RETRIES,
     OPENROUTER_BASE_URL,
     openrouter_headers,
     openrouter_model,
@@ -32,7 +33,7 @@ class MentionOpenRouterModel(MentionChatModel):
             base_url=OPENROUTER_BASE_URL,
             temperature=0.8,
             default_headers=openrouter_headers(),
-            max_retries=5,
+            max_retries=DEFAULT_OPENROUTER_MAX_RETRIES,
         )
 
     def parse_model_output(self, raw_output: Any) -> str:

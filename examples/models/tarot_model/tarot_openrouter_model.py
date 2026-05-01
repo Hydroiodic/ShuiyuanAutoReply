@@ -13,7 +13,7 @@ class TarotOpenRouterModel(BaseOpenRouterModel):
     """
 
     def __init__(self):
-        super().__init__(max_retries=5)
+        super().__init__()
         self.model = openrouter_model("OPENROUTER_TAROT_MODEL")
 
     async def consult_tarot_card(
