@@ -24,7 +24,7 @@ from shuiyuan_auto_reply.constants import auto_reply_tag
 from shuiyuan_auto_reply.shuiyuan.objects import PostDetails, User
 from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 
-from .shuiyuan_tools_wrapper import ShuiyuanToolsWrapper
+from .shuiyuan_tools_wrapper import ShuiyuanToolsWrapper, PostShort
 
 
 class M3EEmbeddings(Embeddings):
@@ -212,19 +212,6 @@ class MentionChatModel:
         arranged_text = f"{identity_info}说：\n{raw}"
         return arranged_text.strip()
 
-    async def _get_recent_posts(self, topic_id: int, limit: int) -> List[PostDetails]:
-        """
-        Get recent posts in the topic, excluding those that contain the auto-reply tag.
-
-        :param topic_id: The ID of the topic to retrieve recent posts from.
-        :param limit: The maximum number of recent posts to retrieve.
-        :return: A list of PostDetails instances for recent posts in the topic.
-        """
-        recent_posts = await self.model.query_recent_posts_by_topic_id(topic_id, limit)
-        return [
-            post for post in recent_posts if post.raw and auto_reply_tag not in post.raw
-        ]
-
     async def get_recent_msgs_context(self, topic_id: int, limit: int = 10) -> str:
         """
         Get recent posts in the topic and arrange them into a text block for context.
@@ -233,16 +220,20 @@ class MentionChatModel:
         :param limit: The maximum number of recent posts to retrieve.
         :return: A formatted string containing the recent posts.
         """
-        recent_posts = await self._get_recent_posts(topic_id, limit)
-        if not recent_posts:
+        tools_wrapper = ShuiyuanToolsWrapper(self.model)
+        posts = await tools_wrapper.query_recent_posts_by_topic_id(topic_id, limit)
+
+        # If there are no recent posts, return a default message
+        if not posts:
             return "无近期回帖记录"
 
+        # Arrange the recent posts into a formatted string
         return "\n\n".join(
             [
                 self._arrange_post_text(
-                    post.raw[:192], User(post.user_id, post.username, post.name)
+                    post.raw[:192], User(0, post.username, post.name)
                 )
-                for post in recent_posts
+                for post in posts
             ]
         )
 
