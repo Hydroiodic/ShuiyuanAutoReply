@@ -14,8 +14,9 @@ from pydantic import BaseModel
 # Add the parent directory to the system path for module resolution
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from models.mention_openrouter_model import MentionOpenRouterModel
-
+from examples.models.mention_model.mention_openrouter_model import (
+    MentionOpenRouterModel,
+)
 from shuiyuan_auto_reply.shuiyuan.objects import User
 from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 

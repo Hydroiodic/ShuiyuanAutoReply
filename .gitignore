@@ -225,3 +225,6 @@ cookies
 
 # Env files
 .env
+
+# Generated images
+generated_images/

@@ -24,6 +24,8 @@ from shuiyuan_auto_reply.constants import auto_reply_tag
 from shuiyuan_auto_reply.shuiyuan.objects import PostDetails, User
 from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 
+from .shuiyuan_tools_wrapper import ShuiyuanToolsWrapper
+
 
 class M3EEmbeddings(Embeddings):
     def __init__(self, model_name="moka-ai/m3e-base"):
@@ -148,9 +150,10 @@ class MentionChatModel:
         ]
 
         # Dynamically create tool wrappers for the above functions
+        tools_wrapper = ShuiyuanToolsWrapper(self.model)
         tools = []
         for func_name in function_list:
-            func = getattr(self.model, func_name)
+            func = getattr(tools_wrapper, func_name)
             if callable(func):
                 tools.append(
                     StructuredTool.from_function(
