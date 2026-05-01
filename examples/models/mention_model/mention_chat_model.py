@@ -240,7 +240,7 @@ class MentionChatModel:
         return "\n\n".join(
             [
                 self._arrange_post_text(
-                    post.raw, User(post.user_id, post.username, post.name)
+                    post.raw[:192], User(post.user_id, post.username, post.name)
                 )
                 for post in recent_posts
             ]

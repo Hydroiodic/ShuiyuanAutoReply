@@ -40,8 +40,8 @@ class PostShort:
         self.topic_id = post.topic_id
         self.name = post.name
         self.username = post.username
-        self.cooked = post.cooked[:384]
-        self.raw = post.raw[:384] if post.raw else None
+        self.cooked = post.cooked[:192]
+        self.raw = post.raw[:192] if post.raw else None
         self.reply_to_post_number = post.reply_to_post_number
 
     def __str__(self):
