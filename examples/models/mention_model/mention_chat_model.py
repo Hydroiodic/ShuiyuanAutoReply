@@ -151,7 +151,6 @@ class MentionChatModel:
             "search_user_by_term",
             "search_post_details_by_optional_username_topic",
             "query_recent_posts_by_topic_id",
-            "generate_image_and_upload",
         ]
 
         # Dynamically create tool wrappers for the above functions

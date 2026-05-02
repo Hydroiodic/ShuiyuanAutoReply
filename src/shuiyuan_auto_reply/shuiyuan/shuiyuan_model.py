@@ -10,10 +10,12 @@ import re
 import time
 import traceback
 from typing import ClassVar, Optional, Tuple
+from urllib.parse import urljoin
 
 import aiohttp
 from dacite import from_dict
 from PIL import Image
+from yarl import URL
 
 from .constants import *
 from .objects import *
@@ -336,7 +338,7 @@ class ShuiyuanModel:
         """
         response = await self._rate_limited_request(
             "get",
-            f"{voter_url}",
+            voter_url,
             params={"post_id": post_id, "poll_name": "poll", "limit": 999},
         )
         if response.status != 200:
@@ -355,7 +357,7 @@ class ShuiyuanModel:
         """
         response = await self._rate_limited_request(
             "get",
-            f"{action_url}",
+            action_url,
             params={
                 "offset": 0,
                 "username": username,
@@ -483,6 +485,48 @@ class ShuiyuanModel:
 
         # Convert to base64
         return base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+    async def download_image(self, image_url: str) -> bytes:
+        """
+        Download an image from the given URL.
+
+        :param image_url: The URL of the image to download. It must start with "upload://".
+        :return: The bytes of the downloaded image.
+        """
+        if not image_url.startswith("upload://"):
+            raise ValueError("Invalid image URL. It must start with 'upload://'.")
+
+        # This is the correct url format for downloading the image from Shuiyuan server
+        image_url = image_url.replace("upload://", download_url + "/")
+
+        response = await self._rate_limited_request(
+            "get", image_url, params={"dl": 1}, allow_redirects=False
+        )
+        if response.status == 200:
+            return await response.read()
+
+        if response.status not in {301, 302, 303, 307, 308}:
+            raise Exception(f"Failed to download image: {await response.text()}")
+
+        redirect_url = response.headers.get("Location")
+        response.release()
+        if not redirect_url:
+            raise Exception(
+                "Failed to download image: redirect response missing Location"
+            )
+
+        redirect_url = urljoin(image_url, redirect_url)
+        async with aiohttp.ClientSession(
+            headers={"User-Agent": default_user_agent}
+        ) as download_session:
+            response = await download_session.get(
+                URL(redirect_url, encoded=True),
+                allow_redirects=True,
+            )
+            if response.status != 200:
+                raise Exception(f"Failed to download image: {await response.text()}")
+
+            return await response.read()
 
     async def close(self) -> None:
         """
