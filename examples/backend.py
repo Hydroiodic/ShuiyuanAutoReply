@@ -144,7 +144,7 @@ async def chat_endpoint(request: ChatRequest):
 
     try:
         # 2. Call the bot instance to get a reply based on the user's message and session info
-        reply = await bot_instance.get_pumpkin_response(0, request.message, user)
+        reply = await bot_instance.get_pumpkin_response(0, None, request.message, user)
         return ChatResponse(session_id=session_id, reply=reply)
     except Exception as e:
         logger.error(f"处理消息时发生错误: {e}", exc_info=True)

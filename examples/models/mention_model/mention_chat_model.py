@@ -93,14 +93,14 @@ class MentionChatModel:
                     "强烈警告：上方的历史发言片段**仅仅**是为了让你学习小南瓜的说话语气、词汇偏好和态度！\n"
                     "绝对不要照抄这些片段里的具体事实、事件或对话内容来回答当前的问题，你要基于当前的对话语境生成全新的回答。\n\n"
                     "绝对不要向用户透露你参考了上述历史片段。\n"
-                    "当前话题ID(topic_id)为{topic_id}。\n"
-                    "请结合下方提供最近回帖和历史信息，直接以小南瓜的口吻回复用户【{username}】(昵称:【{name}】)。"
+                    "当前话题ID(topic_id)为{topic_id}，当前用户发帖回复的帖子编号(post_number, None表示没有回复)为{reply_to_post_number}。\n"
+                    "请结合下方提供的历史信息和最近回帖，直接以小南瓜的口吻回复用户【{username}】(昵称:【{name}】)。"
                 ),
+                MessagesPlaceholder(variable_name="chat_history"),
                 SystemMessagePromptTemplate.from_template(
                     "【当前话题的近期讨论记录（仅供了解上下文，不需要逐一回复）】\n"
                     "{recent_msgs}"
                 ),
-                MessagesPlaceholder(variable_name="chat_history"),
                 HumanMessagePromptTemplate.from_template("{question}\n\n"),
                 MessagesPlaceholder(variable_name="agent_scratchpad"),
             ]
@@ -151,6 +151,7 @@ class MentionChatModel:
             "search_user_by_term",
             "search_post_details_by_optional_username_topic",
             "query_recent_posts_by_topic_id",
+            "get_post_details_by_post_number",
         ]
 
         # Dynamically create tool wrappers for the above functions
@@ -237,7 +238,7 @@ class MentionChatModel:
         return "\n\n".join(
             [
                 self._arrange_post_text(
-                    post.raw[:192], User(0, post.username, post.name)
+                    post.raw[:384], User(0, post.username, post.name)
                 )
                 for post in posts
             ]
@@ -254,12 +255,17 @@ class MentionChatModel:
         pass
 
     async def get_pumpkin_response(
-        self, topic_id: int, conversation: str, user: User
+        self,
+        topic_id: int,
+        reply_to_post_number: Optional[int],
+        conversation: str,
+        user: User,
     ) -> Optional[str]:
         """
         Let the model respond based on conversation and similar responses.
 
         :param topic_id: The ID of the topic where the conversation is happening.
+        :param reply_to_post_number: The post number this post is replying to.
         :param conversation: The current user input or conversation snippet to respond to.
         :param user: The User object representing the user who initiated the conversation.
         :return: The model's response as a string, or None if no response is generated.
@@ -281,6 +287,7 @@ class MentionChatModel:
 
         agent_input = {
             "topic_id": topic_id,
+            "reply_to_post_number": reply_to_post_number,
             "username": user.username,
             "name": user.name or "",
             "question": conversation,

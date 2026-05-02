@@ -48,12 +48,13 @@ class MentionModel(BaseUserActionModel):
         return ShuiyuanModel.remove_shuiyuan_signature(raw.replace(prompt, "")).strip()
 
     async def _pumpkin_condition(
-        self, topic_id: int, raw: str, user: User
+        self, topic_id: int, reply_to_post_number: Optional[int], raw: str, user: User
     ) -> Optional[str]:
         """
         Check if the raw content of a post contains the string "【小南瓜】".
 
         :param topic_id: The ID of the topic where the post is located.
+        :param reply_to_post_number: The post number this post is replying to.
         :param raw: The raw content of the post.
         :param user: The user who posted the message.
         :return: A string to reply to the post if the condition is met, otherwise None.
@@ -65,7 +66,7 @@ class MentionModel(BaseUserActionModel):
 
         # Let the OpenRouter model respond based on conversation and similar responses
         reply = await self.mention_openrouter_model.get_pumpkin_response(
-            topic_id, raw, user
+            topic_id, reply_to_post_number, raw, user
         )
         reply = f"{reply}\n\n（内容由AI生成，仅供参考）"
         return MentionModel._make_unique_reply(reply)
@@ -336,6 +337,7 @@ class MentionModel(BaseUserActionModel):
             # Check pumpkin condition
             text = await self._pumpkin_condition(
                 post_details.topic_id,
+                post_details.reply_to_post_number,
                 post_details.raw,
                 post_user,
             )

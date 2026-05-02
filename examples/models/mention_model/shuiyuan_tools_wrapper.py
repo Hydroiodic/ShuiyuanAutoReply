@@ -79,6 +79,34 @@ class ShuiyuanToolsWrapper:
         except Exception as e:
             return str(e)
 
+    async def get_post_details_by_post_number(
+        self, topic_id: int, post_number: int
+    ) -> PostShort | str:
+        """
+        Get the details of a post by its topic ID and post number.
+        If a user give you a url like "https://shuiyuan.sjtu.edu.cn/t/topic_id/post_number",
+        you can extract the topic_id and post_number from the url and use this function to get the post details.
+        Also, for any post you've retrieved using tool, if the `topic_id` and `reply_to_post_number` are both not None,
+        you can use this function to get the details of the post being replied to.
+
+        :param topic_id: The ID of the topic the post belongs to.
+        :param post_number: The post number within the topic.
+        :return: An instance of PostShort containing the post information or error message.
+        """
+        try:
+            topic = await self.shuiyuan_model._retry_wrapper(
+                self.shuiyuan_model.get_topic_details,
+                topic_id,
+            )
+            post = await self.shuiyuan_model._retry_wrapper(
+                self.shuiyuan_model.get_post_details_by_post_number,
+                topic_id,
+                post_number,
+            )
+            return PostShort(post, topic.title)
+        except Exception as e:
+            return str(e)
+
     async def generate_image_and_upload(self, prompt: str) -> str:
         """
         Generate an image from a prompt and then return the Shuiyuan short URL.

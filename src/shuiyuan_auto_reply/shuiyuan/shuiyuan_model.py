@@ -218,7 +218,7 @@ class ShuiyuanModel:
         sig_re = r"<div data-signature>.*?</div>"
         return re.sub(sig_re, "", text, flags=re.DOTALL).strip()
 
-    async def get_topic_details(self, topic_id: int) -> Tuple[TopicDetails]:
+    async def get_topic_details(self, topic_id: int) -> TopicDetails:
         """
         Get the details of a topic by its ID.
 
