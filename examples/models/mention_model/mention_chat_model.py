@@ -5,6 +5,7 @@ from abc import abstractmethod
 from typing import Dict, List, Optional
 
 from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
+from langchain_classic.agents.agent import RunnableAgent
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_community.tools import DuckDuckGoSearchResults
 from langchain_community.vectorstores.neo4j_vector import Neo4jVector
@@ -196,8 +197,11 @@ class MentionChatModel:
 
         # Create the agent with both MCP tools and Shuiyuan tools
         all_tools = mcp_tools + shuiyuan_tools + [ddg_search_tool]
-        agent = create_tool_calling_agent(self.llm, all_tools, self.prompt).with_retry(
-            stop_after_attempt=DEFAULT_OPENROUTER_MAX_RETRIES
+        agent = RunnableAgent(
+            runnable=create_tool_calling_agent(
+                self.llm, all_tools, self.prompt
+            ).with_retry(stop_after_attempt=DEFAULT_OPENROUTER_MAX_RETRIES),
+            stream_runnable=False,
         )
         self.agent_executor = AgentExecutor(
             agent=agent,
