@@ -622,7 +622,7 @@ class ShuiyuanModel:
         latest: bool = False,
         username: Optional[str] = None,
         topic_id: Optional[int] = None,
-        limit: int = 25,
+        limit: int = 50,
     ) -> Dict[str, List[PostSearchResult]]:
         """
         Search for posts by a search term, an optional username and an optional topic ID, and return detailed information.
@@ -631,7 +631,7 @@ class ShuiyuanModel:
         :param latest: Whether to sort the results by created_at in descending order. Default is False.
         :param username: An optional username to filter posts by. Default is None.
         :param topic_id: An optional topic ID to filter posts by. Default is None.
-        :param limit: The maximum number of results to return. Default is 25. Max is 50 (one page).
+        :param limit: The maximum number of results to return. Default is 50. Max is 50 (one page).
         :return: A dictionary mapping topic titles to lists of PostSearchResult instances for the posts matching the search criteria.
         """
         # Construct the params
@@ -750,10 +750,22 @@ class ShuiyuanModel:
 
         # Use the last `limit` posts for recent activity
         recent_posts = topic_details.post_stream.stream[-limit:]
-        return (
-            topic_details.title,
-            await self.get_post_details_batch_by_topic_id(topic_id, recent_posts),
-        )
+
+        # Get details for all recent posts in batch to save requests
+        batch_size = 100
+        routines = []
+        for i in range(0, len(recent_posts), batch_size):
+            batch_post_ids = recent_posts[i : i + batch_size]
+            routines.append(
+                self.get_post_details_batch_by_topic_id(topic_id, batch_post_ids)
+            )
+
+        # Wait for all routines to complete and construct the final result
+        post_details = []
+        for details in await asyncio.gather(*routines):
+            post_details.extend(details)
+
+        return topic_details.title, post_details[:limit]
 
     async def query_recent_posts_by_topic_id(
         self, topic_id: int, limit: int
