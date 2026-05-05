@@ -20,6 +20,16 @@ class UserShort:
         self.username = user.username
         self.name = user.name
 
+    def __str__(self):
+        return (
+            f"Username: 【{self.username}】" + f" Name: 【{self.name}】"
+            if self.name
+            else "" + "\n"
+        )
+
+    def __repr__(self):
+        return self.__str__()
+
 
 class PostShort:
     """
