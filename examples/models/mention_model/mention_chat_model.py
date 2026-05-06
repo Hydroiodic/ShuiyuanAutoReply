@@ -149,6 +149,7 @@ class MentionChatModel:
         # LangGraph runtime objects are initialized after subclass sets self.llm.
         self.graph: Optional[CompiledStateGraph] = None
         self.llm_with_tools = None
+        self.openai_tools: List[Dict[str, Any]] = []
         self.tools: List[Any] = []
         self.model = model
 
@@ -239,17 +240,14 @@ class MentionChatModel:
         # Shuiyuan-specific tools added here
         shuiyuan_tools = self._load_shuiyuan_tools()
 
-        # Searching API
-        openai_tools = [{"type": "web_search"}]
-
         # Create the native LangGraph tool loop with both MCP tools and Shuiyuan tools.
         all_function_like_tools = mcp_tools + shuiyuan_tools
-        all_tools = all_function_like_tools + openai_tools
+        all_tools = all_function_like_tools + self.openai_tools
         self.tools = all_function_like_tools
         logging.info(
             "Binding LLM with %d function-like tool(s) and %d native OpenAI tool(s)",
             len(all_function_like_tools),
-            len(openai_tools),
+            len(self.openai_tools),
         )
         self.llm_with_tools = self.llm.bind_tools(all_tools).with_retry(
             stop_after_attempt=DEFAULT_OPENROUTER_MAX_RETRIES

@@ -1,6 +1,7 @@
 import os
 from typing import Any
 
+import langchain_core.utils.function_calling as function_calling
 from langchain_openai import ChatOpenAI
 
 from shuiyuan_auto_reply.openrouter.openrouter_model import (
@@ -12,6 +13,16 @@ from shuiyuan_auto_reply.openrouter.openrouter_model import (
 from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 
 from .mention_chat_model import MentionChatModel
+
+
+def _register_openrouter_tool_types(tools: list[dict[str, Any]]) -> None:
+    for tool in tools:
+        tool_type = tool.get("type")
+        if tool_type and tool_type not in function_calling._WellKnownOpenAITools:
+            function_calling._WellKnownOpenAITools = (
+                *function_calling._WellKnownOpenAITools,
+                tool_type,
+            )
 
 
 class MentionOpenRouterModel(MentionChatModel):
@@ -26,6 +37,18 @@ class MentionOpenRouterModel(MentionChatModel):
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
             raise ValueError("Please set the OPENROUTER_API_KEY environment variable.")
+
+        self.openai_tools = [
+            {
+                "type": "openrouter:web_search",
+                "parameters": {
+                    "engine": "exa",
+                    "max_results": 2,
+                    "max_total_results": 4,
+                },
+            },
+        ]
+        _register_openrouter_tool_types(self.openai_tools)
 
         self.llm = ChatOpenAI(
             model=openrouter_model("OPENROUTER_MENTION_MODEL"),
