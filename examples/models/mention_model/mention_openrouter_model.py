@@ -41,11 +41,6 @@ class MentionOpenRouterModel(MentionChatModel):
         self.openai_tools = [
             {
                 "type": "openrouter:web_search",
-                "parameters": {
-                    "engine": "exa",
-                    "max_results": 2,
-                    "max_total_results": 4,
-                },
             },
         ]
         _register_openrouter_tool_types(self.openai_tools)
