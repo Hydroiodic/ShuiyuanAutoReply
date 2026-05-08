@@ -162,7 +162,7 @@ class TopicDetails:
     slow_mode_seconds: int
     draft_key: Optional[str]
     draft_sequence: Optional[int]
-    posted: bool
+    posted: Optional[bool]
     current_post_number: int
     highest_post_number: int
     last_read_post_number: int
