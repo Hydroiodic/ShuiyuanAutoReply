@@ -15,9 +15,9 @@ from neomodel import (
     db,
 )
 from pydantic import BaseModel
-from sentence_transformers import SentenceTransformer
 
 from shuiyuan_auto_reply.constants import settings
+from shuiyuan_auto_reply.embeddings import get_global_sentence_transformer
 
 
 class SentenceNode(StructuredNode):
@@ -37,7 +37,6 @@ class AsyncNeo4jDatabaseManager:
 
     def __init__(
         self,
-        model_name: str = "moka-ai/m3e-base",
         database_url: Optional[str] = None,
         database_auth: Optional[str] = None,
     ):
@@ -49,7 +48,7 @@ class AsyncNeo4jDatabaseManager:
         if self.database_auth is None:
             self.database_auth = os.getenv("NEO4J_DB_AUTH")
 
-        self.model = SentenceTransformer(model_name)
+        self.model = get_global_sentence_transformer()
         self.embedding_dims = settings.embedding_dims
         self.database_name = "neo4j"
         self._configured = False

@@ -13,6 +13,10 @@ class Settings:
         return "<!-- 来自南瓜的自动回复 -->"
 
     @property
+    def embedding_model_name(self) -> str:
+        return os.getenv("EMBEDDING_MODEL_NAME", "moka-ai/m3e-base")
+
+    @property
     def embedding_dims(self) -> int:
         value = os.getenv("EMBEDDING_DIMS")
         if value is None:

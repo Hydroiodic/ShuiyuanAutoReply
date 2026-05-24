@@ -6,7 +6,6 @@ from abc import abstractmethod
 from typing import Annotated, Dict, List, Optional, Tuple, TypedDict
 
 from langchain_community.chat_message_histories import ChatMessageHistory
-from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langchain_core.prompts import (
@@ -20,9 +19,9 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
-from sentence_transformers import SentenceTransformer
 
 from shuiyuan_auto_reply.database.neo4j_mgr import create_global_async_neo4j_manager
+from shuiyuan_auto_reply.embeddings import get_global_text_embeddings
 from shuiyuan_auto_reply.openrouter.openrouter_model import (
     DEFAULT_OPENROUTER_MAX_RETRIES,
 )
@@ -48,19 +47,6 @@ class MentionGraphState(TypedDict, total=False):
     messages: Annotated[List[AnyMessage], add_messages]
 
 
-class M3EEmbeddings(Embeddings):
-    def __init__(self, model_name="moka-ai/m3e-base"):
-        self.model = SentenceTransformer(model_name)
-
-    def embed_documents(self, texts):
-        embeddings = self.model.encode(texts, normalize_embeddings=True)
-        return embeddings.tolist()
-
-    def embed_query(self, text):
-        embedding = self.model.encode(text, normalize_embeddings=True)
-        return embedding.tolist()
-
-
 class MentionChatModel:
     """
     A model for generating responses in a forum context,
@@ -73,7 +59,7 @@ class MentionChatModel:
         # The llm model should be defined in the subclass
         self.llm: BaseChatModel
         # The embedding model used in this application
-        self.embeddings = M3EEmbeddings()
+        self.embeddings = get_global_text_embeddings()
 
         # Define the prompt template
         self.prompt = ChatPromptTemplate.from_messages(
