@@ -2,7 +2,7 @@ import ast
 import asyncio
 import logging
 import os
-from typing import List, Optional
+from typing import Dict, List, Optional
 from urllib.parse import quote
 
 from neomodel import (
@@ -25,13 +25,11 @@ class SentenceNode(StructuredNode):
 
     text = StringProperty(required=True)
     embedding = ArrayProperty(FloatProperty(), required=True)
-    category = StringProperty(required=False)
     created_at = DateTimeProperty(default_now=True)
 
 
 class SentenceResponse(BaseModel):
     text: str
-    category: Optional[str]
     score: float
 
 
@@ -94,7 +92,7 @@ class AsyncNeo4jDatabaseManager:
 
         return f"bolt://{quote(str(username))}:{quote(str(password))}@{raw_url}"
 
-    def _run_cypher(self, query: str, params: Optional[dict] = None):
+    def _run_cypher(self, query: str, params: Optional[Dict] = None):
         self._ensure_configured()
         return db.cypher_query(query, params=params or {})
 
@@ -163,7 +161,7 @@ class AsyncNeo4jDatabaseManager:
             """
             CALL db.index.vector.queryNodes('sentence_embeddings', $top_k, $embedding)
             YIELD node, score
-            RETURN node.text AS text, node.category AS category, score
+            RETURN node.text AS text, score
             ORDER BY score DESC
             """,
             {
@@ -171,7 +169,7 @@ class AsyncNeo4jDatabaseManager:
                 "top_k": top_k,
             },
         )
-        return [SentenceResponse(text=r[0], category=r[1], score=r[2]) for r in rows]
+        return [SentenceResponse(text=r[0], score=r[1]) for r in rows]
 
 
 _global_async_neo4j_manager: Optional[AsyncNeo4jDatabaseManager] = None

@@ -1,32 +1,18 @@
 import json
 import logging
 import os
-from typing import Any, Optional
+from contextlib import AbstractAsyncContextManager
+from typing import Dict, List, Optional, Tuple
 
+from langchain_core.embeddings import Embeddings
+from langchain_core.tools import BaseTool
+from langgraph.store.base import BaseStore, SearchItem
 from langmem import create_manage_memory_tool, create_search_memory_tool
 
 from shuiyuan_auto_reply.constants import settings
 from shuiyuan_auto_reply.database.postgres_memory_mgr import (
     AsyncPostgresMemoryDatabaseManager,
     create_global_async_postgres_memory_manager,
-)
-
-MENTION_MEMORY_CONFIG_KEY = "mention_memory_key"
-MENTION_MEMORY_NAMESPACE = ("mention_memories", f"{{{MENTION_MEMORY_CONFIG_KEY}}}")
-
-
-MANAGE_MEMORY_INSTRUCTIONS = (
-    "你可以管理当前论坛用户的长期记忆。仅在信息稳定、明确、以后会反复有用时调用："
-    "用户明确要求记住/忘记某件事；用户表达了稳定偏好；已有记忆明显过期或错误。"
-    "不要保存当前帖子全文、临时楼层上下文、工具输出原文、一次性的情绪反应、"
-    "敏感政治/历史/暴力内容，或任何不需要长期保留的隐私信息。"
-    "记忆应简短、可复用，并用第三人称描述用户偏好或稳定事实。"
-)
-
-
-SEARCH_MEMORY_INSTRUCTIONS = (
-    "搜索当前论坛用户的长期记忆。通常系统已经会主动检索相关记忆；"
-    "只有在需要更多用户偏好、历史要求或稳定事实时再调用。"
 )
 
 
@@ -45,19 +31,23 @@ class MentionMemoryModel:
     only needs to ask for tools, a store, and formatted search results.
     """
 
-    def __init__(self, embedding: Any):
+    def __init__(self, embedding: Embeddings):
         self.embedding = embedding
         self.postgres: Optional[AsyncPostgresMemoryDatabaseManager] = None
-        self.embedding_dims = settings.embedding_dims
+
         self.search_limit = int(os.getenv("LANGMEM_SEARCH_LIMIT", "5"))
         self.max_context_chars = int(os.getenv("LANGMEM_CONTEXT_MAX_CHARS", "1600"))
         self.strict = _env_flag("POSTGRES_MEMORY_STRICT", False) or _env_flag(
             "POSTGRES_STRICT", False
         )
 
-        self.store: Optional[Any] = None
-        self.tools: list[Any] = []
-        self._store_context: Optional[Any] = None
+        self.embedding_dims = settings.embedding_dims
+        self.memory_config_key = "mention_memory_key"
+        self.memory_namespace = "mention_memories"
+
+        self.store: Optional[BaseStore] = None
+        self.tools: List[BaseTool] = []
+        self._store_context: Optional[AbstractAsyncContextManager[BaseStore]] = None
         self._initialized = False
 
     @property
@@ -89,21 +79,10 @@ class MentionMemoryModel:
             self.store = await self._store_context.__aenter__()
             await self.store.setup()
 
-            self.tools = [
-                create_manage_memory_tool(
-                    namespace=MENTION_MEMORY_NAMESPACE,
-                    instructions=MANAGE_MEMORY_INSTRUCTIONS,
-                    name="manage_mention_memory",
-                ),
-                create_search_memory_tool(
-                    namespace=MENTION_MEMORY_NAMESPACE,
-                    instructions=SEARCH_MEMORY_INSTRUCTIONS,
-                    name="search_mention_memory",
-                ),
-            ]
+            self.tools = self._create_tools()
             logging.info(
                 "Initialized persistent mention memory with namespace=%s",
-                MENTION_MEMORY_NAMESPACE,
+                self.namespace_template,
             )
         except Exception as exc:
             await self._close_store_context()
@@ -156,18 +135,46 @@ class MentionMemoryModel:
 
         return self._format_memory_items(items)
 
-    def graph_config(self, memory_key: str) -> dict[str, dict[str, str]]:
-        return {"configurable": {MENTION_MEMORY_CONFIG_KEY: memory_key}}
+    @property
+    def namespace_template(self) -> Tuple[str, str]:
+        return (self.memory_namespace, f"{{{self.memory_config_key}}}")
+
+    def graph_config(self, memory_key: str) -> Dict[str, Dict[str, str]]:
+        return {"configurable": {self.memory_config_key: memory_key}}
 
     @staticmethod
-    def memory_key(user_id: Any) -> str:
+    def memory_key(user_id: int) -> str:
         if user_id is None:
             raise ValueError("user.id is required for mention memory")
         return str(user_id)
 
-    @staticmethod
-    def namespace_for_user(memory_key: str) -> tuple[str, str]:
-        return ("mention_memories", memory_key)
+    def namespace_for_user(self, memory_key: str) -> Tuple[str, str]:
+        return (self.memory_namespace, memory_key)
+
+    def _create_tools(self) -> List[BaseTool]:
+        manage_memory_instructions = (
+            "你可以管理当前论坛用户的长期记忆。仅在信息稳定、明确、以后会反复有用时调用："
+            "用户明确要求记住/忘记某件事；用户表达了稳定偏好；已有记忆明显过期或错误。"
+            "不要保存当前帖子全文、临时楼层上下文、工具输出原文、一次性的情绪反应、"
+            "敏感政治/历史/暴力内容，或任何不需要长期保留的隐私信息。"
+            "记忆应简短、可复用，并用第三人称描述用户偏好或稳定事实。"
+        )
+        search_memory_instructions = (
+            "搜索当前论坛用户的长期记忆。通常系统已经会主动检索相关记忆；"
+            "只有在需要更多用户偏好、历史要求或稳定事实时再调用。"
+        )
+        return [
+            create_manage_memory_tool(
+                namespace=self.namespace_template,
+                instructions=manage_memory_instructions,
+                name="manage_mention_memory",
+            ),
+            create_search_memory_tool(
+                namespace=self.namespace_template,
+                instructions=search_memory_instructions,
+                name="search_mention_memory",
+            ),
+        ]
 
     async def _close_store_context(self) -> None:
         if not self._store_context:
@@ -182,7 +189,7 @@ class MentionMemoryModel:
             raise RuntimeError(message) from exc
         logging.exception("%s; persistent mention memory disabled", message)
 
-    def _format_memory_items(self, items: list[Any]) -> str:
+    def _format_memory_items(self, items: List[SearchItem]) -> str:
         lines = []
         used_chars = 0
 
@@ -201,7 +208,7 @@ class MentionMemoryModel:
         return "\n".join(lines) if lines else "无相关长期记忆"
 
     @staticmethod
-    def _extract_memory_content(item: Any) -> str:
+    def _extract_memory_content(item: SearchItem) -> str:
         value = getattr(item, "value", item)
 
         if isinstance(value, dict):

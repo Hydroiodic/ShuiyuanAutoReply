@@ -242,7 +242,7 @@ class MentionModel(BaseUserActionModel):
         for poll_title, options in results.items():
             # Poll title line
             reply_lines.append(f"## {poll_title}")
-            # Any error reported for this poll
+            # Error reported for this poll
             if isinstance(options, str):
                 reply_lines.append(f"错误：{options}")
                 continue

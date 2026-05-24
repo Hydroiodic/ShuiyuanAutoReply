@@ -2,8 +2,9 @@ import asyncio
 import logging
 import os
 from datetime import datetime
-from typing import Any, Optional
+from typing import List, Optional
 
+from langchain_core.embeddings import Embeddings
 from sqlalchemy import Column, DateTime, Integer, String, Text, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.ext.declarative import declarative_base
@@ -94,9 +95,9 @@ class AsyncPostgresMemoryDatabaseManager:
     def create_langgraph_store(
         self,
         *,
-        embedding: Any,
+        embedding: Embeddings,
         dims: int,
-        fields: Optional[list[str]] = None,
+        fields: Optional[List[str]] = None,
     ):
         """Create the LangGraph AsyncPostgresStore used by LangMem."""
         from langgraph.store.postgres.aio import AsyncPostgresStore

@@ -1,6 +1,6 @@
 import random
 import re
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Tuple
 
 import skia
 
@@ -48,7 +48,7 @@ class FortuneModel:
         is_true: bool,
         to_do_font: skia.Font,
         detail_font: skia.Font,
-    ) -> tuple[float, float]:
+    ) -> Tuple[float, float]:
         # If to_do is None, return 0 width
         if to_do is None:
             return 0.0, 0.0
@@ -170,11 +170,11 @@ class FortuneModel:
         )
 
     @staticmethod
-    def _split_text_by_emoji(text: str) -> List[tuple[Literal["text", "emoji"], str]]:
+    def _split_text_by_emoji(text: str) -> List[Tuple[Literal["text", "emoji"], str]]:
         # Find all emojis in the text
         emoji_pattern = re.compile(emoji_format, flags=re.UNICODE)
 
-        parts: List[tuple[Literal["text", "emoji"], str]] = []
+        parts: List[Tuple[Literal["text", "emoji"], str]] = []
         last_end = 0
 
         # Iterate through all matches of the emoji pattern
@@ -218,7 +218,7 @@ class FortuneModel:
 
     def _draw_emoji_text(
         self,
-        xy: tuple[float, float],
+        xy: Tuple[float, float],
         text: str,
         primary_font: skia.Font,
         emoji_font: skia.Font,

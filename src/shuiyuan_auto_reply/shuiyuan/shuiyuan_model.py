@@ -17,6 +17,8 @@ from dacite import from_dict
 from PIL import Image
 from yarl import URL
 
+from shuiyuan_auto_reply.retry import async_retry
+
 from .constants import *
 from .objects import *
 
@@ -218,6 +220,7 @@ class ShuiyuanModel:
         sig_re = r"<div data-signature>.*?</div>"
         return re.sub(sig_re, "", text, flags=re.DOTALL).strip()
 
+    @async_retry(log_traceback=True)
     async def get_topic_details(self, topic_id: int) -> TopicDetails:
         """
         Get the details of a topic by its ID.
@@ -272,6 +275,7 @@ class ShuiyuanModel:
         data = await response.json()
         return from_dict(PostDetails, data)
 
+    @async_retry(log_traceback=True)
     async def get_post_details_by_post_number(
         self, topic_id: int, post_number: int
     ) -> PostDetails:
@@ -570,27 +574,8 @@ class ShuiyuanModel:
     ##             Query Methods Start             ##
     #################################################
 
-    async def _retry_wrapper(
-        self,
-        func: callable,
-        *args,
-        retries: int = 3,
-        delay: int = 1,
-        **kwargs,
-    ) -> any:
-        for attempt in range(retries):
-            try:
-                return await func(*args, **kwargs)
-            except Exception as e:
-                logging.warning(
-                    f"{func.__name__} attempt {attempt + 1} failed with error: {e}, "
-                    f"traceback is as follows:\n{traceback.format_exc()}"
-                )
-                if attempt < retries - 1:
-                    await asyncio.sleep(delay)
-        raise Exception(f"All {retries} attempts failed for function {func.__name__}")
-
-    async def _search_user_by_term(self, term: str) -> List[User]:
+    @async_retry(log_traceback=True)
+    async def search_user_by_term(self, term: str) -> List[User]:
         """
         Search for users by a search term.
 
@@ -606,15 +591,6 @@ class ShuiyuanModel:
         data = await response.json()
         user_list = data.get("users", [])
         return [from_dict(User, user) for user in user_list]
-
-    async def search_user_by_term(self, term: str) -> List[User]:
-        """
-        Search for users by a search term.
-
-        :param term: The search term to use for finding users. It has to be NON-EMPTY.
-        :return: A list of User instances matching the search term.
-        """
-        return await self._retry_wrapper(self._search_user_by_term, term)
 
     async def _search_post_by_optional_username_topic(
         self,
@@ -634,21 +610,18 @@ class ShuiyuanModel:
         :param limit: The maximum number of results to return. Default is 50. Max is 50 (one page).
         :return: A dictionary mapping topic titles to lists of PostSearchResult instances for the posts matching the search criteria.
         """
-        # Construct the params
-        query = f"{term} order:{"latest" if latest else "none"}"
+        query = f"{term} order:{'latest' if latest else 'none'}"
         if username:
             query += f" @{username}"
         if topic_id:
             query += f" topic:{topic_id}"
 
-        # Request to get the search results
         response = await self._rate_limited_request(
             "get", f"{post_search_url}", params={"q": query}
         )
         if response.status != 200:
             raise Exception(f"Failed to search posts: {await response.text()}")
 
-        # Parse posts and topics from the response, and construct the result
         data = await response.json()
         post_list = [
             from_dict(PostSearchResult, post) for post in data.get("posts", [])
@@ -656,57 +629,15 @@ class ShuiyuanModel:
         topic_list = [
             from_dict(TopicSearchResult, topic) for topic in data.get("topics", [])
         ]
-        # Create a mapping from topic ID to topic details for easy lookup
         topic_dict = {topic.id: topic for topic in topic_list}
 
-        # Group posts by their topic_id and construct the result
         result = {}
         for post in post_list[:limit]:
             result.setdefault(topic_dict[post.topic_id].title, []).append(post)
 
         return result
 
-    async def _search_post_details_by_optional_username_topic(
-        self,
-        term: str = "",
-        latest: bool = False,
-        username: Optional[str] = None,
-        topic_id: Optional[int] = None,
-    ) -> Dict[str, List[PostDetails]]:
-        """
-        Search for posts by a search term, an optional username and an optional topic ID, and return detailed information.
-
-        :param term: Optional search term to use for finding posts. Default is empty.
-        :param latest: Whether to sort the results by created_at in descending order. Default is False.
-        :param username: An optional username to filter posts by. Default is None.
-        :param topic_id: An optional topic ID to filter posts by. Default is None.
-        :return: A dictionary mapping topic titles to lists of detailed post information.
-        """
-        # First we search for posts with the given criteria
-        post_search_results = await self._search_post_by_optional_username_topic(
-            term, latest, username, topic_id
-        )
-
-        # For posts with the same topic_id, we can get details in batch to save requests
-        routines = []
-        for topic_title, posts in post_search_results.items():
-            # All posts in the same topic have the same topic_id
-            topic_id = posts[0].topic_id
-            # Get details for all posts in this topic in batch
-            routines.append(
-                self.get_post_details_batch_by_topic_id(
-                    topic_id, [post.id for post in posts]
-                )
-            )
-
-        # Wait for all routines to complete and construct the final result
-        result = {}
-        details_lists = await asyncio.gather(*routines)
-        for topic_title, details_list in zip(post_search_results.keys(), details_lists):
-            result[topic_title] = details_list
-
-        return result
-
+    @async_retry(log_traceback=True)
     async def search_post_details_by_optional_username_topic(
         self,
         term: str = "",
@@ -723,50 +654,27 @@ class ShuiyuanModel:
         :param topic_id: An optional topic ID to filter posts by. Default is None.
         :return: A dictionary mapping topic titles to lists of detailed post information.
         """
-        return await self._retry_wrapper(
-            self._search_post_details_by_optional_username_topic,
-            term,
-            latest,
-            username,
-            topic_id,
+        post_search_results = await self._search_post_by_optional_username_topic(
+            term, latest, username, topic_id
         )
 
-    async def _query_recent_posts_by_topic_id(
-        self, topic_id: int, limit: int
-    ) -> Tuple[str, List[PostDetails]]:
-        """
-        Query recent posts in a topic by its ID.
-
-        :param topic_id: The ID of the topic to query.
-        :param limit: The maximum number of recent posts to retrieve.
-        :return: A tuple containing the topic title and a list of PostDetails instances for the recent posts in the topic.
-        """
-        # Check if `limit` is positive
-        if limit <= 0:
-            raise ValueError("Limit must be a positive integer")
-
-        # Retrieve the topic details to get the post stream
-        topic_details = await self.get_topic_details(topic_id)
-
-        # Use the last `limit` posts for recent activity
-        recent_posts = topic_details.post_stream.stream[-limit:]
-
-        # Get details for all recent posts in batch to save requests
-        batch_size = 100
         routines = []
-        for i in range(0, len(recent_posts), batch_size):
-            batch_post_ids = recent_posts[i : i + batch_size]
+        for topic_title, posts in post_search_results.items():
+            topic_id = posts[0].topic_id
             routines.append(
-                self.get_post_details_batch_by_topic_id(topic_id, batch_post_ids)
+                self.get_post_details_batch_by_topic_id(
+                    topic_id, [post.id for post in posts]
+                )
             )
 
-        # Wait for all routines to complete and construct the final result
-        post_details = []
-        for details in await asyncio.gather(*routines):
-            post_details.extend(details)
+        result = {}
+        details_lists = await asyncio.gather(*routines)
+        for topic_title, details_list in zip(post_search_results.keys(), details_lists):
+            result[topic_title] = details_list
 
-        return topic_details.title, post_details[:limit]
+        return result
 
+    @async_retry(log_traceback=True)
     async def query_recent_posts_by_topic_id(
         self, topic_id: int, limit: int
     ) -> Tuple[str, List[PostDetails]]:
@@ -777,9 +685,25 @@ class ShuiyuanModel:
         :param limit: The maximum number of recent posts to retrieve.
         :return: A tuple containing the topic title and a list of PostDetails instances for the recent posts in the topic.
         """
-        return await self._retry_wrapper(
-            self._query_recent_posts_by_topic_id, topic_id, limit
-        )
+        if limit <= 0:
+            raise ValueError("Limit must be a positive integer")
+
+        topic_details = await self.get_topic_details(topic_id)
+        recent_posts = topic_details.post_stream.stream[-limit:]
+
+        batch_size = 100
+        routines = []
+        for i in range(0, len(recent_posts), batch_size):
+            batch_post_ids = recent_posts[i : i + batch_size]
+            routines.append(
+                self.get_post_details_batch_by_topic_id(topic_id, batch_post_ids)
+            )
+
+        post_details = []
+        for details in await asyncio.gather(*routines):
+            post_details.extend(details)
+
+        return topic_details.title, post_details[:limit]
 
 
 def _global_ignore_illegal_cookies() -> None:

@@ -2,13 +2,14 @@ import asyncio
 import logging
 import os
 from datetime import datetime
-from functools import wraps
-from typing import Any, Callable, List, Optional
+from typing import List, Optional
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, selectinload
+
+from shuiyuan_auto_reply.retry import async_retry
 
 RecordPostgresBase = declarative_base()
 
@@ -73,10 +74,6 @@ class Alias(RecordPostgresBase):
         )
 
 
-def _default_value(default: Any) -> Any:
-    return default() if callable(default) else default
-
-
 def _env_flag(*names: str) -> bool:
     return any(
         os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
@@ -92,29 +89,6 @@ def _to_sqlalchemy_async_url(db_url: str) -> str:
     if db_url.startswith("postgres://"):
         return "postgresql+psycopg://" + db_url.removeprefix("postgres://")
     return db_url
-
-
-def retry_postgres_record_operation(default: Any):
-    """Retry a Postgres record operation and return a safe default."""
-
-    def decorator(func: Callable):
-        @wraps(func)
-        async def wrapper(self, *args, **kwargs):
-            try:
-                return await self._execute_with_retry(
-                    lambda: func(self, *args, **kwargs)
-                )
-            except Exception as exc:
-                logging.error(
-                    "Failed to %s after retries: %s",
-                    func.__name__,
-                    exc,
-                )
-                return _default_value(default)
-
-        return wrapper
-
-    return decorator
 
 
 class AsyncPostgresRecordDatabaseManager:
@@ -150,28 +124,6 @@ class AsyncPostgresRecordDatabaseManager:
     def _strict_from_env() -> bool:
         return _env_flag("POSTGRES_RECORD_STRICT", "POSTGRES_STRICT")
 
-    @staticmethod
-    async def _execute_with_retry(
-        coro: Callable,
-        retries: int = 3,
-        delay: float = 1.0,
-    ):
-        """Execute a coroutine with retries on transient database failures."""
-        last_error: Optional[Exception] = None
-        for attempt in range(retries):
-            try:
-                return await coro()
-            except Exception as exc:
-                last_error = exc
-                logging.warning("Attempt %d failed: %s", attempt + 1, exc)
-                if attempt < retries - 1:
-                    await asyncio.sleep(delay)
-
-        logging.error("All retry attempts failed")
-        if last_error is not None:
-            raise last_error
-        raise RuntimeError("All retry attempts failed")
-
     async def create_tables(self) -> None:
         """Create all record tables."""
         async with self.engine.begin() as conn:
@@ -184,7 +136,7 @@ class AsyncPostgresRecordDatabaseManager:
             await conn.run_sync(RecordPostgresBase.metadata.drop_all)
         logging.info("Postgres record tables dropped successfully")
 
-    @retry_postgres_record_operation(default=None)
+    @async_retry(default=None)
     async def add_user(self, user_id: int) -> Optional[User]:
         """Add a new user."""
         async with self.async_session() as session:
@@ -207,14 +159,14 @@ class AsyncPostgresRecordDatabaseManager:
                 await session.rollback()
                 raise
 
-    @retry_postgres_record_operation(default=None)
+    @async_retry(default=None)
     async def get_user(self, user_id: int) -> Optional[User]:
         """Get user by ID."""
         async with self.async_session() as session:
             result = await session.execute(select(User).where(User.user_id == user_id))
             return result.scalar_one_or_none()
 
-    @retry_postgres_record_operation(default=None)
+    @async_retry(default=None)
     async def get_or_add_user(self, user_id: int) -> Optional[User]:
         """Get user by ID, create if it does not exist."""
         async with self.async_session() as session:
@@ -236,7 +188,7 @@ class AsyncPostgresRecordDatabaseManager:
                 await session.rollback()
                 raise
 
-    @retry_postgres_record_operation(default=False)
+    @async_retry(default=False)
     async def update_user(
         self,
         user_id: int,
@@ -269,7 +221,7 @@ class AsyncPostgresRecordDatabaseManager:
                 await session.rollback()
                 raise
 
-    @retry_postgres_record_operation(default=False)
+    @async_retry(default=False)
     async def delete_user(self, user_id: int) -> bool:
         """Delete a user and all associated records."""
         async with self.async_session() as session:
@@ -290,14 +242,14 @@ class AsyncPostgresRecordDatabaseManager:
                 await session.rollback()
                 raise
 
-    @retry_postgres_record_operation(default=list)
+    @async_retry(default=list)
     async def get_all_users(self) -> List[User]:
         """Get all users."""
         async with self.async_session() as session:
             result = await session.execute(select(User))
             return list(result.scalars().all())
 
-    @retry_postgres_record_operation(default=None)
+    @async_retry(default=None)
     async def add_record(self, user_id: int, record_str: str) -> Optional[Record]:
         """Add a record, creating the user if it does not exist."""
         async with self.async_session() as session:
@@ -325,7 +277,7 @@ class AsyncPostgresRecordDatabaseManager:
                 await session.rollback()
                 raise
 
-    @retry_postgres_record_operation(default=None)
+    @async_retry(default=None)
     async def get_record(self, record_id: int) -> Optional[Record]:
         """Get record by ID with user relationship loaded."""
         async with self.async_session() as session:
@@ -336,14 +288,14 @@ class AsyncPostgresRecordDatabaseManager:
             )
             return result.scalar_one_or_none()
 
-    @retry_postgres_record_operation(default=list)
+    @async_retry(default=list)
     async def get_all_records(self) -> List[Record]:
         """Get all records."""
         async with self.async_session() as session:
             result = await session.execute(select(Record))
             return list(result.scalars().all())
 
-    @retry_postgres_record_operation(default=list)
+    @async_retry(default=list)
     async def get_random_records(self, limit: int = 1) -> List[Record]:
         """Get random records."""
         async with self.async_session() as session:
@@ -352,7 +304,7 @@ class AsyncPostgresRecordDatabaseManager:
             )
             return list(result.scalars().all())
 
-    @retry_postgres_record_operation(default=list)
+    @async_retry(default=list)
     async def get_records_by_user(self, user_id: int) -> List[Record]:
         """Get all records for a specific user."""
         async with self.async_session() as session:
@@ -361,7 +313,7 @@ class AsyncPostgresRecordDatabaseManager:
             )
             return list(result.scalars().all())
 
-    @retry_postgres_record_operation(default=None)
+    @async_retry(default=None)
     async def get_random_record_by_user(self, user_id: int) -> Optional[Record]:
         """Get a random record for a specific user."""
         async with self.async_session() as session:
@@ -373,7 +325,7 @@ class AsyncPostgresRecordDatabaseManager:
             )
             return result.scalar_one_or_none()
 
-    @retry_postgres_record_operation(default=False)
+    @async_retry(default=False)
     async def delete_record(self, record_id: int) -> bool:
         """Delete a record."""
         async with self.async_session() as session:
@@ -394,7 +346,7 @@ class AsyncPostgresRecordDatabaseManager:
                 await session.rollback()
                 raise
 
-    @retry_postgres_record_operation(default=None)
+    @async_retry(default=None)
     async def add_alias(self, user_id: int, alias_str: str) -> Optional[Alias]:
         """Add an alias, creating the user if it does not exist."""
         async with self.async_session() as session:
@@ -422,7 +374,7 @@ class AsyncPostgresRecordDatabaseManager:
                 await session.rollback()
                 raise
 
-    @retry_postgres_record_operation(default=None)
+    @async_retry(default=None)
     async def get_user_by_alias(self, alias_str: str) -> Optional[User]:
         """Get user by alias."""
         async with self.async_session() as session:
@@ -434,7 +386,7 @@ class AsyncPostgresRecordDatabaseManager:
             alias = result.scalar_one_or_none()
             return alias.user if alias else None
 
-    @retry_postgres_record_operation(default=list)
+    @async_retry(default=list)
     async def get_all_aliases(self) -> List[Alias]:
         """Get all aliases."""
         async with self.async_session() as session:

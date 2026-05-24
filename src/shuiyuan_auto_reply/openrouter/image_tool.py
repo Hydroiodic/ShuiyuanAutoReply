@@ -3,7 +3,7 @@ import io
 import mimetypes
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 from uuid import uuid4
 
 from openai import BadRequestError
@@ -144,7 +144,7 @@ class OpenRouterImageTool(BaseOpenRouterModel):
         return url
 
     @staticmethod
-    def _decode_data_url(data_url: str) -> tuple[bytes, str]:
+    def _decode_data_url(data_url: str) -> Tuple[bytes, str]:
         match = _DATA_URL_RE.match(data_url)
         if not match:
             raise ValueError("OpenRouter image URL is not a base64 data URL.")

@@ -1,5 +1,5 @@
 import os
-from typing import Any
+from typing import Dict, List
 
 import langchain_core.utils.function_calling as function_calling
 from langchain_openai import ChatOpenAI
@@ -15,7 +15,7 @@ from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 from .mention_chat_model import MentionChatModel
 
 
-def _register_openrouter_tool_types(tools: list[dict[str, Any]]) -> None:
+def _register_openrouter_tool_types(tools: List[Dict[str, str]]) -> None:
     for tool in tools:
         tool_type = tool.get("type")
         if tool_type and tool_type not in function_calling._WellKnownOpenAITools:
@@ -54,7 +54,7 @@ class MentionOpenRouterModel(MentionChatModel):
             max_retries=DEFAULT_OPENROUTER_MAX_RETRIES,
         )
 
-    def parse_model_output(self, raw_output: Any) -> str:
+    def parse_model_output(self, raw_output: object) -> str:
         """
         Parse the raw output from the model to extract the final response text.
 

@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Dict, Optional
 
 
 def normalize_socks_proxy_env() -> None:
@@ -32,7 +32,7 @@ OPENROUTER_APP_REFERER = "https://github.com/Hydroiodic/ShuiyuanAutoReply"
 OPENROUTER_APP_TITLE = "ShuiyuanAutoReply"
 
 
-def openrouter_headers() -> dict[str, str]:
+def openrouter_headers() -> Dict[str, str]:
     return {
         "HTTP-Referer": OPENROUTER_APP_REFERER,
         "X-OpenRouter-Title": OPENROUTER_APP_TITLE,

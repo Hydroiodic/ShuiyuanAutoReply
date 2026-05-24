@@ -94,12 +94,8 @@ class ShuiyuanToolsWrapper:
         :return: An instance of PostShort containing the post information or error message.
         """
         try:
-            topic = await self.shuiyuan_model._retry_wrapper(
-                self.shuiyuan_model.get_topic_details,
-                topic_id,
-            )
-            post = await self.shuiyuan_model._retry_wrapper(
-                self.shuiyuan_model.get_post_details_by_post_number,
+            topic = await self.shuiyuan_model.get_topic_details(topic_id)
+            post = await self.shuiyuan_model.get_post_details_by_post_number(
                 topic_id,
                 post_number,
             )

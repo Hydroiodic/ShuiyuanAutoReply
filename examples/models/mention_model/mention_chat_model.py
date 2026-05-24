@@ -3,7 +3,7 @@ import json
 import logging
 import os
 from abc import abstractmethod
-from typing import Annotated, Any, Dict, List, Optional, TypedDict
+from typing import Annotated, Dict, List, Optional, Tuple, TypedDict
 
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.embeddings import Embeddings
@@ -14,7 +14,7 @@ from langchain_core.prompts import (
     MessagesPlaceholder,
     SystemMessagePromptTemplate,
 )
-from langchain_core.tools import StructuredTool
+from langchain_core.tools import BaseTool, StructuredTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
@@ -40,9 +40,9 @@ class MentionGraphState(TypedDict, total=False):
     user: User
     context: str
     long_term_memory: str
-    chat_history: List[Any]
+    chat_history: List[AnyMessage]
     recent_msgs: str
-    raw_output: Any
+    raw_output: object
     final_text: str
     history_obj: ChatMessageHistory
     messages: Annotated[List[AnyMessage], add_messages]
@@ -152,8 +152,8 @@ class MentionChatModel:
         # LangGraph runtime objects are initialized after subclass sets self.llm.
         self.graph: Optional[CompiledStateGraph] = None
         self.llm_with_tools = None
-        self.openai_tools: List[Dict[str, Any]] = []
-        self.tools: List[Any] = []
+        self.openai_tools: List[Dict[str, str]] = []
+        self.tools: List[BaseTool] = []
         self.memory_model = MentionMemoryModel(self.embeddings)
         self.model = model
 
@@ -163,7 +163,7 @@ class MentionChatModel:
         return history
 
     @staticmethod
-    def _preview_text(value: Any, limit: Optional[int] = 512) -> str:
+    def _preview_text(value: object, limit: Optional[int] = 512) -> str:
         return str(value).replace("\n", "\\n")[:limit]
 
     @staticmethod
@@ -191,7 +191,7 @@ class MentionChatModel:
             ]
 
     @staticmethod
-    def _extract_tool_call_name_args(tool_call: Any) -> tuple[str, Any]:
+    def _extract_tool_call_name_args(tool_call: object) -> Tuple[str, object]:
         if isinstance(tool_call, dict):
             function_payload = tool_call.get("function")
             if isinstance(function_payload, dict):
@@ -205,7 +205,7 @@ class MentionChatModel:
         return getattr(tool_call, "name", "<unknown>"), getattr(tool_call, "args", {})
 
     @staticmethod
-    def _serialize_tool_args(tool_args: Any) -> str:
+    def _serialize_tool_args(tool_args: object) -> str:
         if isinstance(tool_args, str):
             text = tool_args
         else:
@@ -405,15 +405,16 @@ class MentionChatModel:
         self, state: MentionGraphState
     ) -> MentionGraphState:
         user = state["user"]
-        memory_key = self.memory_model.memory_key(getattr(user, "id", None))
+        memory_key = self.memory_model.memory_key(user.id)
         memory_context = await self.memory_model.search_relevant_memories(
             memory_key,
             state["conversation"],
         )
         logging.info(
-            "Mention graph loaded long-term memory: user_id=%s chars=%d",
+            "Mention graph loaded long-term memory: user_id=%s chars=%d preview=%r",
             memory_key,
             len(memory_context),
+            memory_context[:256],
         )
         return {"long_term_memory": memory_context}
 
@@ -498,7 +499,7 @@ class MentionChatModel:
             {
                 "topic_id": state["topic_id"],
                 "reply_to_post_number": state["reply_to_post_number"],
-                "user_id": getattr(user, "id", ""),
+                "user_id": user.id,
                 "username": user.username,
                 "name": user.name or "",
                 "context": state.get("context", ""),
@@ -621,7 +622,7 @@ class MentionChatModel:
             "conversation": conversation,
             "user": user,
         }
-        memory_key = self.memory_model.memory_key(getattr(user, "id", None))
+        memory_key = self.memory_model.memory_key(user.id)
         response = await self.graph.ainvoke(
             graph_input,
             config=self.memory_model.graph_config(memory_key),
