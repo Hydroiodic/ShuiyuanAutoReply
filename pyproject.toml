@@ -10,7 +10,6 @@ authors = [{ name = "Hydroiodic_Acid", email = "liao_chengfan@sjtu.edu.cn" }]
 requires-python = ">=3.12"
 dependencies = [
     "aiohttp",
-    "aiomysql",
     "apscheduler",
     "dacite",
     "ddgs",
@@ -26,7 +25,6 @@ dependencies = [
     "openai",
     "pandas",
     "pillow",
-    "pymysql",
     "python-dotenv",
     "sentence-transformers",
     "skia-python",
