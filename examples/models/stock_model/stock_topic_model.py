@@ -10,7 +10,7 @@ from PIL import Image
 
 from shuiyuan_auto_reply.ashare.ashare_model import AShareModel
 from shuiyuan_auto_reply.ashare.objects import StockData
-from shuiyuan_auto_reply.constants import auto_reply_tag
+from shuiyuan_auto_reply.constants import settings
 from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 from shuiyuan_auto_reply.shuiyuan.topic_model import BaseTopicModel
 
@@ -230,7 +230,7 @@ class StockTopicModel(BaseTopicModel):
 
         try:
             # If the post is an auto-reply, we should skip it
-            if auto_reply_tag in post_details.raw:
+            if settings.auto_reply_tag in post_details.raw:
                 return
 
             # OK, check the content of the post

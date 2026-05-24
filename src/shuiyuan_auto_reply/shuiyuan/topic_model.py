@@ -6,7 +6,7 @@ from abc import abstractmethod
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from ..constants import auto_reply_tag
+from ..constants import settings
 from .objects import TimeInADay
 from .shuiyuan_model import ShuiyuanModel
 
@@ -55,7 +55,7 @@ class BaseTopicModel:
         return (
             f"{base}\n\n"
             f"<!-- {BaseTopicModel._generate_random_string(20)} -->\n"
-            f"{auto_reply_tag}"
+            f"{settings.auto_reply_tag}"
         )
 
     @abstractmethod

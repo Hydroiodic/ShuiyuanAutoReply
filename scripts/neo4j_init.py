@@ -16,16 +16,19 @@ logging.basicConfig(
 # Load all environment variables from the .env file
 dotenv.load_dotenv()
 
-from shuiyuan_auto_reply.constants import auto_reply_tag
-from shuiyuan_auto_reply.database.neo4j_mgr import global_async_neo4j_manager
+from shuiyuan_auto_reply.constants import settings
+from shuiyuan_auto_reply.database.neo4j_mgr import create_global_async_neo4j_manager
 
 
 async def init_database():
     """Initialize the Neo4j database"""
     try:
         logging.info("Initializing Neo4j database...")
+        neo4j_manager = await create_global_async_neo4j_manager(strict=True)
+        if neo4j_manager is None:
+            raise RuntimeError("NEO4J_DB_URL is not configured")
         # Initialize the Neo4j database
-        await global_async_neo4j_manager.initialize()
+        await neo4j_manager.initialize()
 
         # The signature has to be removed before storing the sentences
         sig_re = r"<div data-signature>.*?</div>"
@@ -43,7 +46,7 @@ async def init_database():
                 if pd.isna(raw):
                     continue
                 # Auto-reply posts should not be imported
-                if auto_reply_tag in str(raw):
+                if settings.auto_reply_tag in str(raw):
                     continue
                 # For other posts, import them into the database
                 # But signature needs to be removed from the post
@@ -55,7 +58,7 @@ async def init_database():
             # Log the number of records to be imported
             logging.info(f"Number of records to import: {len(data_to_import)}")
             # Wait for all import routines to complete
-            await global_async_neo4j_manager.store_sentences(data_to_import)
+            await neo4j_manager.store_sentences(data_to_import)
             logging.info("Data imported successfully!")
         else:
             logging.warning(f"CSV file {file_path} not found. Skipping data import.")

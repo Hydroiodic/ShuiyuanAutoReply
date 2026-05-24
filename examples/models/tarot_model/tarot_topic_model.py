@@ -8,7 +8,7 @@ from typing import Optional
 
 import skia
 
-from shuiyuan_auto_reply.constants import assets_directory, auto_reply_tag
+from shuiyuan_auto_reply.constants import settings
 from shuiyuan_auto_reply.fortune.fortune_model import FortuneModel
 from shuiyuan_auto_reply.shuiyuan.objects import User
 from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
@@ -38,8 +38,8 @@ class TarotTopicModel(BaseTopicModel):
         super().__init__(model, topic_id)
         self.openrouter_model = TarotOpenRouterModel()
         self.tarot_model = TarotModel(
-            tarot_data_path=os.path.join(assets_directory, "tarot_data.json"),
-            tarot_img_path=os.path.join(assets_directory, "tarot_img"),
+            tarot_data_path=os.path.join(settings.assets_directory, "tarot_data.json"),
+            tarot_img_path=os.path.join(settings.assets_directory, "tarot_img"),
         )
 
     async def _upload_and_get_tarot_image_url(
@@ -228,7 +228,7 @@ class TarotTopicModel(BaseTopicModel):
                 return
 
             # If the post is an auto-reply, we should skip it
-            if auto_reply_tag in post_details.raw:
+            if settings.auto_reply_tag in post_details.raw:
                 return
 
             # OK, check the content of the post

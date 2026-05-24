@@ -5,7 +5,7 @@ import traceback
 from abc import abstractmethod
 from typing import List
 
-from ..constants import auto_reply_tag
+from ..constants import settings
 from .objects import UserActionDetails
 from .shuiyuan_model import ShuiyuanModel
 
@@ -55,7 +55,7 @@ class BaseUserActionModel:
         return (
             f"{base}\n\n"
             f"<!-- {BaseUserActionModel._generate_random_string(20)} -->\n"
-            f"{auto_reply_tag}"
+            f"{settings.auto_reply_tag}"
         )
 
     @abstractmethod

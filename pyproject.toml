@@ -19,6 +19,8 @@ dependencies = [
     "langchain-openai",
     "langchain-mcp-adapters",
     "langgraph",
+    "langgraph-checkpoint-postgres",
+    "langmem",
     "neomodel",
     "numpy",
     "openai",

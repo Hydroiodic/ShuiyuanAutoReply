@@ -13,14 +13,17 @@ logging.basicConfig(
 # Load all environment variables from the .env file
 dotenv.load_dotenv()
 
-from shuiyuan_auto_reply.database.mysql_mgr import global_async_mysql_manager
+from shuiyuan_auto_reply.database.mysql_mgr import create_global_async_mysql_manager
 
 
 async def init_database():
     """Initialize the database"""
     try:
         logging.info("Creating database tables...")
-        await global_async_mysql_manager.create_tables()
+        mysql_manager = await create_global_async_mysql_manager(strict=True)
+        if mysql_manager is None:
+            raise RuntimeError("MYSQL_DB_URL is not configured")
+        await mysql_manager.create_tables()
         logging.info("Database initialized successfully!")
     except Exception as e:
         logging.error(f"Error initializing database: {e}")

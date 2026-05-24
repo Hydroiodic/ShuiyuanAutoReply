@@ -1,5 +1,6 @@
 import ast
 import asyncio
+import logging
 import os
 from typing import List, Optional
 from urllib.parse import quote
@@ -15,6 +16,8 @@ from neomodel import (
 )
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
+
+from shuiyuan_auto_reply.constants import settings
 
 
 class SentenceNode(StructuredNode):
@@ -34,8 +37,22 @@ class SentenceResponse(BaseModel):
 
 class AsyncNeo4jDatabaseManager:
 
-    def __init__(self, model_name: str = "moka-ai/m3e-base"):
+    def __init__(
+        self,
+        model_name: str = "moka-ai/m3e-base",
+        database_url: Optional[str] = None,
+        database_auth: Optional[str] = None,
+    ):
+        self.database_url = database_url or self._database_url_from_env()
+        if not self.database_url:
+            raise ValueError("Please set the NEO4J_DB_URL environment variable.")
+
+        self.database_auth = database_auth
+        if self.database_auth is None:
+            self.database_auth = os.getenv("NEO4J_DB_AUTH")
+
         self.model = SentenceTransformer(model_name)
+        self.embedding_dims = settings.embedding_dims
         self.database_name = "neo4j"
         self._configured = False
 
@@ -46,9 +63,22 @@ class AsyncNeo4jDatabaseManager:
         config.DATABASE_URL = self._build_database_url()
         self._configured = True
 
+    @staticmethod
+    def _database_url_from_env() -> Optional[str]:
+        return os.getenv("NEO4J_DB_URL")
+
+    @staticmethod
+    def _strict_from_env() -> bool:
+        return os.getenv("NEO4J_STRICT", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+
     def _build_database_url(self) -> str:
-        raw_url = os.getenv("NEO4J_DB_URL", "").strip()
-        raw_auth = os.getenv("NEO4J_DB_AUTH", "").strip()
+        raw_url = self.database_url.strip()
+        raw_auth = (self.database_auth or "").strip()
 
         if not raw_url:
             raise ValueError("NEO4J_DB_URL is not set")
@@ -82,10 +112,10 @@ class AsyncNeo4jDatabaseManager:
         )
         await asyncio.to_thread(
             self._run_cypher,
-            """
+            f"""
             CREATE VECTOR INDEX sentence_embeddings IF NOT EXISTS
             FOR (n:Sentence) ON n.embedding
-            OPTIONS {indexConfig: {`vector.dimensions`: 768}}
+            OPTIONS {{indexConfig: {{`vector.dimensions`: {self.embedding_dims}}}}}
             """,
         )
 
@@ -144,4 +174,40 @@ class AsyncNeo4jDatabaseManager:
         return [SentenceResponse(text=r[0], category=r[1], score=r[2]) for r in rows]
 
 
-global_async_neo4j_manager = AsyncNeo4jDatabaseManager()
+_global_async_neo4j_manager: Optional[AsyncNeo4jDatabaseManager] = None
+_global_async_neo4j_manager_lock: Optional[asyncio.Lock] = None
+
+
+def _get_global_async_neo4j_manager_lock() -> asyncio.Lock:
+    global _global_async_neo4j_manager_lock
+    if _global_async_neo4j_manager_lock is None:
+        _global_async_neo4j_manager_lock = asyncio.Lock()
+    return _global_async_neo4j_manager_lock
+
+
+async def create_global_async_neo4j_manager(
+    *,
+    strict: Optional[bool] = None,
+) -> Optional[AsyncNeo4jDatabaseManager]:
+    """Return the cached Neo4j manager, or None when NEO4J_DB_URL is unset."""
+    global _global_async_neo4j_manager
+
+    if _global_async_neo4j_manager is not None:
+        return _global_async_neo4j_manager
+
+    database_url = AsyncNeo4jDatabaseManager._database_url_from_env()
+    is_strict = (
+        AsyncNeo4jDatabaseManager._strict_from_env() if strict is None else strict
+    )
+    if not database_url:
+        if is_strict:
+            raise ValueError("Please set the NEO4J_DB_URL environment variable.")
+        logging.info("NEO4J_DB_URL is not configured")
+        return None
+
+    async with _get_global_async_neo4j_manager_lock():
+        if _global_async_neo4j_manager is None:
+            _global_async_neo4j_manager = AsyncNeo4jDatabaseManager(
+                database_url=database_url
+            )
+        return _global_async_neo4j_manager

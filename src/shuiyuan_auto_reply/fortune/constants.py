@@ -4,7 +4,7 @@ from typing import List
 
 import skia
 
-from ..constants import assets_directory
+from ..constants import settings
 
 
 @dataclass
@@ -61,7 +61,7 @@ unlucky = ["凶", "小凶"] * 2 + too_unlucky
 fortune_list = lucky + unlucky
 
 # Importing Fonts
-font_dir = os.path.join(assets_directory, "fonts")
+font_dir = os.path.join(settings.assets_directory, "fonts")
 noto_emoji = os.path.join(font_dir, "Noto_Color_Emoji", "NotoColorEmoji-Regular.ttf")
 noto_regu = os.path.join(font_dir, "Noto_Sans_SC", "static", "NotoSansSC-Regular.ttf")
 noto_bold = os.path.join(font_dir, "Noto_Sans_SC", "static", "NotoSansSC-Bold.ttf")
