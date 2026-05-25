@@ -28,6 +28,19 @@ class ShuiyuanToolsWrapper:
         except Exception as e:
             return str(e)
 
+    async def search_user_by_user_id(self, user_id: int) -> UserShort | None | str:
+        """
+        Search for a user by their user ID.
+
+        :param user_id: The ID of the user to search for.
+        :return: An instance of UserShort for the user with the given ID or error message.
+        """
+        try:
+            user = await self.shuiyuan_model.search_user_by_user_id(user_id)
+            return UserShort(user) if user else None
+        except Exception as e:
+            return str(e)
+
     async def search_post_details_by_optional_username_topic(
         self,
         term: str = "",

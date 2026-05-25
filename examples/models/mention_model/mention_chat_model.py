@@ -239,6 +239,7 @@ class MentionChatModel:
         # These async functions will be used as tools
         function_list = [
             "search_user_by_term",
+            "search_user_by_user_id",
             "search_post_details_by_optional_username_topic",
             "query_recent_posts_by_topic_id",
             "get_post_details_by_post_number",

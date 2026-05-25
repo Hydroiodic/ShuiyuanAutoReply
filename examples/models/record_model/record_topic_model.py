@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 import traceback
@@ -540,10 +541,20 @@ class RecordTopicModel(BaseTopicModel):
             logging.warning("No records found in database for daily routine.")
             return
 
+        # Try to get the usernames for these records
+        routines = []
+        for record in random_records:
+            routines.append(self.model.search_user_by_user_id(record.user_id))
+        users = await asyncio.gather(*routines, return_exceptions=True)
+
         # Format the text to reply
         text = f"{datetime.now().strftime('%Y-%m-%d')} 推荐语录：\n\n"
-        for record in random_records:
-            text += f"{RecordTopicModel._to_quote_format(record.record_str)}\n\n"
+        for record, user in zip(random_records, users):
+            if isinstance(user, User):
+                text += f"{user.username}: \n"
+                text += f"{RecordTopicModel._to_quote_format(record.record_str)}\n\n"
+            else:
+                text += f"{RecordTopicModel._to_quote_format(record.record_str)}\n\n"
 
         # Try to reply to the topic
         try:

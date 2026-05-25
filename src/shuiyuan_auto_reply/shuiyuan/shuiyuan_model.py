@@ -592,11 +592,35 @@ class ShuiyuanModel:
         user_list = data.get("users", [])
         return [from_dict(User, user) for user in user_list]
 
-    async def _search_post_by_optional_username_topic(
+    @async_retry(log_traceback=True)
+    async def search_user_by_user_id(self, user_id: int) -> Optional[User]:
+        """
+        Search for a user by their user ID.
+        NOTE: None does not show that the user does not exist.
+            A possible condition is that the user haven't posted anything yet.
+
+        :param user_id: The ID of the user to search for.
+        :return: An instance of User if found, otherwise None.
+        """
+        post_search_result = await self._search_post_by_options(
+            user_id=user_id, limit=1
+        )
+        if len(post_search_result) == 0:
+            logging.warning(
+                f"No posts found for user with ID '{user_id}'."
+                "User may exist but has not posted anything."
+            )
+            return None
+
+        post = next(iter(post_search_result.values()))[0]
+        return User(id=user_id, username=post.username, name=post.name)
+
+    async def _search_post_by_options(
         self,
         term: str = "",
         latest: bool = False,
         username: Optional[str] = None,
+        user_id: Optional[int] = None,
         topic_id: Optional[int] = None,
         limit: int = 50,
     ) -> Dict[str, List[PostSearchResult]]:
@@ -606,13 +630,19 @@ class ShuiyuanModel:
         :param term: Optional search term to use for finding posts. Default is empty.
         :param latest: Whether to sort the results by created_at in descending order. Default is False.
         :param username: An optional username to filter posts by. Default is None.
+        :param user_id: An optional user ID to filter posts by. Default is None.
         :param topic_id: An optional topic ID to filter posts by. Default is None.
         :param limit: The maximum number of results to return. Default is 50. Max is 50 (one page).
         :return: A dictionary mapping topic titles to lists of PostSearchResult instances for the posts matching the search criteria.
         """
+        # Only one of username and user_id can be provided
+        # If both are provided, username will be used
+
         query = f"{term} order:{'latest' if latest else 'none'}"
         if username:
             query += f" @{username}"
+        elif user_id:
+            query += f" user:{user_id}"
         if topic_id:
             query += f" topic:{topic_id}"
 
@@ -654,8 +684,8 @@ class ShuiyuanModel:
         :param topic_id: An optional topic ID to filter posts by. Default is None.
         :return: A dictionary mapping topic titles to lists of detailed post information.
         """
-        post_search_results = await self._search_post_by_optional_username_topic(
-            term, latest, username, topic_id
+        post_search_results = await self._search_post_by_options(
+            term=term, latest=latest, username=username, topic_id=topic_id
         )
 
         routines = []
