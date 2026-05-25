@@ -165,8 +165,8 @@ class TopicDetails:
     posted: Optional[bool]
     current_post_number: int
     highest_post_number: int
-    last_read_post_number: int
-    last_read_post_id: int
+    last_read_post_number: Optional[int]
+    last_read_post_id: Optional[int]
     chunk_size: int
     bookmarked: bool
     message_bus_last_id: int
