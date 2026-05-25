@@ -25,12 +25,13 @@ def _env_flag(name: str, default: bool = False) -> bool:
 
 
 class SearchMentionMemoryInput(BaseModel):
-    target_user_id: int = Field(
+    target_user_id: Optional[int] = Field(
+        default=None,
         description=(
             "Stable Shuiyuan forum user.id whose mention memories should be searched. "
-            "Use the current prompt user_id for the current user; resolve another "
-            "user's id first if only username is known."
-        )
+            "Use the current prompt user_id for the current user; omit this field "
+            "to search all mention memory namespaces when the target user is unknown."
+        ),
     )
     query: Optional[str] = Field(
         default=None,
@@ -176,9 +177,9 @@ class MentionMemoryModel:
                 name="search_mention_memory",
                 args_schema=SearchMentionMemoryInput,
                 description=(
-                    "Search mention long-term memories by stable target_user_id. "
-                    "Use the current prompt user_id for the current user, or resolve "
-                    "another user's stable user.id before searching their memories."
+                    "Search mention long-term memories. Use stable target_user_id "
+                    "when known; omit target_user_id to search all mention memory "
+                    "namespaces when the relevant user is unknown."
                 ),
             ),
             StructuredTool.from_function(
@@ -196,7 +197,7 @@ class MentionMemoryModel:
     async def search_mention_memory(
         self,
         *,
-        target_user_id: int,
+        target_user_id: Optional[int] = None,
         query: Optional[str] = None,
         limit: int = 5,
         offset: int = 0,
@@ -205,10 +206,10 @@ class MentionMemoryModel:
         Search mention long-term memories for a target forum user.
 
         Use the stable forum user.id as target_user_id. For the current user, use
-        the current user_id from the prompt. For another user, resolve their user.id
-        first with Shuiyuan user tools if only a username is known.
+        the current user_id from the prompt. Omit target_user_id to search all mention
+        memory namespaces when the relevant user is unknown.
 
-        :param target_user_id: Stable Shuiyuan forum user.id to search.
+        :param target_user_id: Stable Shuiyuan forum user.id to search, or None to search globally.
         :param query: Semantic search query for stable facts or preferences.
         :param limit: Maximum number of memories to return; clamped to 1..20.
         :param offset: Number of matching memories to skip.
@@ -217,19 +218,26 @@ class MentionMemoryModel:
         if not self.store:
             return "长期记忆未启用"
 
-        try:
-            memory_key = self.memory_key(target_user_id)
-        except ValueError as exc:
-            return str(exc)
-
         query_text = query.strip() if query else None
         limit = self._normalize_limit(limit)
         offset = max(0, offset)
+        namespace_prefix: Tuple[str, ...]
+        memory_key: Optional[str] = None
+
+        if target_user_id is None:
+            namespace_prefix = (self.memory_namespace,)
+        else:
+            try:
+                memory_key = self.memory_key(target_user_id)
+            except ValueError as exc:
+                return str(exc)
+            namespace_prefix = self.namespace_for_user(memory_key)
 
         try:
-            await self._touch_memory_key(memory_key, query=query_text)
+            if memory_key is not None:
+                await self._touch_memory_key(memory_key, query=query_text)
             items = await self.store.asearch(
-                self.namespace_for_user(memory_key),
+                namespace_prefix,
                 query=query_text,
                 limit=limit,
                 offset=offset,
@@ -240,6 +248,14 @@ class MentionMemoryModel:
                 target_user_id,
             )
             return "长期记忆检索失败"
+
+        if target_user_id is None:
+            if not items:
+                return "全局无相关长期记忆"
+            return "全局长期记忆：\n" + self._format_memory_items(
+                items,
+                include_user_id=True,
+            )
 
         if not items:
             return f"user_id={target_user_id} 无相关长期记忆"
@@ -367,14 +383,23 @@ class MentionMemoryModel:
             raise RuntimeError(message) from exc
         logging.exception("%s; persistent mention memory disabled", message)
 
-    def _format_memory_items(self, items: List[SearchItem]) -> str:
+    def _format_memory_items(
+        self,
+        items: List[SearchItem],
+        *,
+        include_user_id: bool = False,
+    ) -> str:
         lines = []
         used_chars = 0
 
         for index, item in enumerate(items, start=1):
             memory_id = getattr(item, "key", "<unknown>")
             content = self._extract_memory_content(item)
-            line = f"{index}. id={memory_id}: {content}"
+            if include_user_id:
+                user_id = self._extract_user_id_from_item(item)
+                line = f"{index}. user_id={user_id} id={memory_id}: {content}"
+            else:
+                line = f"{index}. id={memory_id}: {content}"
             line_chars = len(line) + (1 if lines else 0)
 
             if used_chars + line_chars > self.max_context_chars:
@@ -384,6 +409,16 @@ class MentionMemoryModel:
             used_chars += line_chars
 
         return "\n".join(lines) if lines else "无相关长期记忆"
+
+    def _extract_user_id_from_item(self, item: SearchItem) -> str:
+        namespace = getattr(item, "namespace", ())
+        if (
+            isinstance(namespace, (list, tuple))
+            and len(namespace) >= 2
+            and namespace[0] == self.memory_namespace
+        ):
+            return str(namespace[1])
+        return "<unknown>"
 
     @staticmethod
     def _extract_memory_content(item: SearchItem) -> str:
