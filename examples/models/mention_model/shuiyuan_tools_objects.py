@@ -13,16 +13,19 @@ class UserShort:
     Represents a short version of a user, with only the most important information.
     """
 
+    id: int
     username: str
     name: Optional[str]
 
     def __init__(self, user: User):
+        self.id = user.id
         self.username = user.username
         self.name = user.name
 
     def __str__(self):
         return (
-            f"Username: 【{self.username}】" + f" Name: 【{self.name}】"
+            f"ID: 【{self.id}】 Username: 【{self.username}】"
+            + f" Name: 【{self.name}】"
             if self.name
             else "" + "\n"
         )
@@ -40,6 +43,7 @@ class PostShort:
     post_number: int
     topic_id: int
     name: Optional[str]
+    user_id: int
     username: str
     cooked: str
     raw: Optional[str]
@@ -51,6 +55,7 @@ class PostShort:
         self.post_number = post.post_number
         self.topic_id = post.topic_id
         self.name = post.name
+        self.user_id = post.user_id
         self.username = post.username
         self.cooked = post.cooked[:384]
         self.raw = post.raw[:384] if post.raw else None
@@ -60,7 +65,7 @@ class PostShort:
     def __str__(self):
         return (
             f"PostMeta: id={self.id}, post_number={self.post_number}, topic_id={self.topic_id}\n"
-            f"FromUser: {self.username}{f' ({self.name})' if self.name else ''}\n"
+            f"FromUser: {UserShort(User(id=self.user_id, username=self.username, name=self.name))}"
             f"TopicTitle: {self.title}\n"
             f"Content: {ShuiyuanModel.remove_shuiyuan_signature(self.raw) if self.raw else self.cooked}\n"
         )

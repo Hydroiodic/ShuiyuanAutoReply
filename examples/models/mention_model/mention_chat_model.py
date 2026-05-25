@@ -102,10 +102,11 @@ class MentionChatModel:
                     "注意，在需要时，你可以对该过程进行递归调用查看帖子回复链。\n\n"
                     "【长期记忆工具】\n"
                     "1. 系统会自动检索当前用户相关长期记忆；长期记忆按稳定的 user_id 隔离。\n"
-                    "2. 当 search_mention_memory 工具可用且确实需要时，可以查询更多；工具会自动使用当前用户 user_id 对应的记忆命名空间。\n"
-                    "3. 当 manage_mention_memory 工具可用时，只有用户明确要求记住/忘记、表达稳定偏好，或已有记忆明显过期才调用。\n"
-                    "4. 不要把当前帖子全文、临时楼层上下文、工具输出原文、敏感政治/历史/暴力内容，或一次性闲聊写入长期记忆。\n"
-                    "5. 写入记忆时应简短、稳定、可复用；不要向用户透露记忆系统、记忆 ID 或工具调用细节。\n\n"
+                    "2. search_mention_memory 和 manage_mention_memory 都需要 target_user_id；查询或管理当前用户记忆时使用当前用户 user_id。\n"
+                    "3. 如需查询或管理其他用户记忆，必须先确定对方稳定的 user.id；只有 username 时先用用户查询工具解析，不要进行猜测。\n"
+                    "4. manage_mention_memory 只在用户明确要求记住/忘记、表达稳定偏好，或已有记忆明显过期时调用；update/delete 前先 search 拿到准确 memory_id。\n"
+                    "5. 不要把当前帖子全文、临时楼层上下文、工具输出原文、敏感政治/历史/暴力内容，或一次性闲聊写入长期记忆。\n"
+                    "6. 写入记忆时应简短、稳定、可复用，并用第三人称说明该 user_id 对应用户的偏好或稳定事实；不要向用户透露记忆系统、记忆 ID 或工具调用细节。\n\n"
                     "【当前任务】\n"
                     "- topic_id: {topic_id}\n"
                     "- 当前用户 user_id: {user_id}\n"
@@ -392,9 +393,10 @@ class MentionChatModel:
     ) -> MentionGraphState:
         user = state["user"]
         memory_key = self.memory_model.memory_key(user.id)
-        memory_context = await self.memory_model.search_relevant_memories(
-            memory_key,
-            state["conversation"],
+        memory_context = await self.memory_model.search_mention_memory(
+            target_user_id=user.id,
+            query=state["conversation"],
+            limit=self.memory_model.search_limit,
         )
         logging.info(
             "Mention graph loaded long-term memory: user_id=%s chars=%d preview=%r",

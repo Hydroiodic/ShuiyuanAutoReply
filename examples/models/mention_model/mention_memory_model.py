@@ -1,13 +1,14 @@
 import json
 import logging
 import os
+import uuid
 from contextlib import AbstractAsyncContextManager
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 from langchain_core.embeddings import Embeddings
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.store.base import BaseStore, SearchItem
-from langmem import create_manage_memory_tool, create_search_memory_tool
+from pydantic import BaseModel, Field
 
 from shuiyuan_auto_reply.constants import settings
 from shuiyuan_auto_reply.database.postgres_memory_mgr import (
@@ -21,6 +22,61 @@ def _env_flag(name: str, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+class SearchMentionMemoryInput(BaseModel):
+    target_user_id: int = Field(
+        description=(
+            "Stable Shuiyuan forum user.id whose mention memories should be searched. "
+            "Use the current prompt user_id for the current user; resolve another "
+            "user's id first if only username is known."
+        )
+    )
+    query: Optional[str] = Field(
+        default=None,
+        description=(
+            "Semantic search query. Use a concise query about the relevant stable "
+            "fact or preference; omit only when listing memories without a specific query."
+        ),
+    )
+    limit: int = Field(
+        default=5,
+        description="Maximum number of memories to return. Values are clamped to 1..20.",
+    )
+    offset: int = Field(
+        default=0,
+        description="Number of matching memories to skip before returning results.",
+    )
+
+
+class ManageMentionMemoryInput(BaseModel):
+    target_user_id: int = Field(
+        description=(
+            "Stable Shuiyuan forum user.id whose mention memory namespace should be "
+            "modified. Do not use username as the key."
+        )
+    )
+    action: Literal["create", "update", "delete"] = Field(
+        default="create",
+        description=(
+            "Memory operation. create needs content and no memory_id; update needs "
+            "memory_id and content; delete needs memory_id."
+        ),
+    )
+    content: Optional[str] = Field(
+        default=None,
+        description=(
+            "Short stable memory content to create or replace. Keep it reusable and "
+            "third-person. Required for create/update and ignored for delete."
+        ),
+    )
+    memory_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "Exact memory id returned by search_mention_memory. Required for "
+            "update/delete and omitted for create."
+        ),
+    )
 
 
 class MentionMemoryModel:
@@ -97,44 +153,6 @@ class MentionMemoryModel:
         self.store = None
         self.tools = []
 
-    async def search_relevant_memories(
-        self,
-        memory_key: str,
-        query: str,
-    ) -> str:
-        if not self.store:
-            return "长期记忆未启用"
-
-        try:
-            try:
-                if self.postgres is not None:
-                    await self.postgres.touch_mention_memory_key(
-                        memory_key,
-                        query=query,
-                    )
-            except Exception:
-                logging.exception(
-                    "Failed to update mention memory metadata for user=%s",
-                    memory_key,
-                )
-
-            items = await self.store.asearch(
-                self.namespace_for_user(memory_key),
-                query=query,
-                limit=self.search_limit,
-            )
-        except Exception:
-            logging.exception(
-                "Failed to search mention memories for user=%s",
-                memory_key,
-            )
-            return "长期记忆检索失败"
-
-        if not items:
-            return "无相关长期记忆"
-
-        return self._format_memory_items(items)
-
     @property
     def namespace_template(self) -> Tuple[str, str]:
         return (self.memory_namespace, f"{{{self.memory_config_key}}}")
@@ -152,29 +170,189 @@ class MentionMemoryModel:
         return (self.memory_namespace, memory_key)
 
     def _create_tools(self) -> List[BaseTool]:
-        manage_memory_instructions = (
-            "你可以管理当前论坛用户的长期记忆。仅在信息稳定、明确、以后会反复有用时调用："
-            "用户明确要求记住/忘记某件事；用户表达了稳定偏好；已有记忆明显过期或错误。"
-            "不要保存当前帖子全文、临时楼层上下文、工具输出原文、一次性的情绪反应、"
-            "敏感政治/历史/暴力内容，或任何不需要长期保留的隐私信息。"
-            "记忆应简短、可复用，并用第三人称描述用户偏好或稳定事实。"
-        )
-        search_memory_instructions = (
-            "搜索当前论坛用户的长期记忆。通常系统已经会主动检索相关记忆；"
-            "只有在需要更多用户偏好、历史要求或稳定事实时再调用。"
-        )
         return [
-            create_manage_memory_tool(
-                namespace=self.namespace_template,
-                instructions=manage_memory_instructions,
-                name="manage_mention_memory",
-            ),
-            create_search_memory_tool(
-                namespace=self.namespace_template,
-                instructions=search_memory_instructions,
+            StructuredTool.from_function(
+                coroutine=self.search_mention_memory,
                 name="search_mention_memory",
+                args_schema=SearchMentionMemoryInput,
+                description=(
+                    "Search mention long-term memories by stable target_user_id. "
+                    "Use the current prompt user_id for the current user, or resolve "
+                    "another user's stable user.id before searching their memories."
+                ),
+            ),
+            StructuredTool.from_function(
+                coroutine=self.manage_mention_memory,
+                name="manage_mention_memory",
+                args_schema=ManageMentionMemoryInput,
+                description=(
+                    "Create, update, or delete mention long-term memory by stable "
+                    "target_user_id. Only store stable reusable facts or preferences. "
+                    "Search first to get memory_id before update/delete."
+                ),
             ),
         ]
+
+    async def search_mention_memory(
+        self,
+        *,
+        target_user_id: int,
+        query: Optional[str] = None,
+        limit: int = 5,
+        offset: int = 0,
+    ) -> str:
+        """
+        Search mention long-term memories for a target forum user.
+
+        Use the stable forum user.id as target_user_id. For the current user, use
+        the current user_id from the prompt. For another user, resolve their user.id
+        first with Shuiyuan user tools if only a username is known.
+
+        :param target_user_id: Stable Shuiyuan forum user.id to search.
+        :param query: Semantic search query for stable facts or preferences.
+        :param limit: Maximum number of memories to return; clamped to 1..20.
+        :param offset: Number of matching memories to skip.
+        :return: Formatted memory search results for the target user.
+        """
+        if not self.store:
+            return "长期记忆未启用"
+
+        try:
+            memory_key = self.memory_key(target_user_id)
+        except ValueError as exc:
+            return str(exc)
+
+        query_text = query.strip() if query else None
+        limit = self._normalize_limit(limit)
+        offset = max(0, offset)
+
+        try:
+            await self._touch_memory_key(memory_key, query=query_text)
+            items = await self.store.asearch(
+                self.namespace_for_user(memory_key),
+                query=query_text,
+                limit=limit,
+                offset=offset,
+            )
+        except Exception:
+            logging.exception(
+                "Failed to search mention memories for target_user_id=%s",
+                target_user_id,
+            )
+            return "长期记忆检索失败"
+
+        if not items:
+            return f"user_id={target_user_id} 无相关长期记忆"
+
+        return (
+            f"user_id={target_user_id} 长期记忆：\n{self._format_memory_items(items)}"
+        )
+
+    async def manage_mention_memory(
+        self,
+        *,
+        target_user_id: int,
+        action: Literal["create", "update", "delete"] = "create",
+        content: Optional[str] = None,
+        memory_id: Optional[str] = None,
+    ) -> str:
+        """
+        Create, update, or delete mention long-term memory for a target user.
+
+        Use target_user_id to choose the user's memory namespace. Create needs
+        content and no memory_id. Update needs memory_id and content. Delete needs
+        memory_id. Search first when updating or deleting so the memory_id is exact.
+
+        :param target_user_id: Stable Shuiyuan forum user.id to modify.
+        :param action: One of create, update, or delete.
+        :param content: Short stable memory content for create/update.
+        :param memory_id: Exact memory uuid for update/delete.
+        :return: Operation result text.
+        """
+        if not self.store:
+            return "长期记忆未启用"
+
+        try:
+            memory_key = self.memory_key(target_user_id)
+        except ValueError as exc:
+            return str(exc)
+
+        if action not in {"create", "update", "delete"}:
+            return "无效的长期记忆操作，只能是 create、update 或 delete"
+
+        normalized_id = memory_id.strip() if memory_id else None
+        normalized_content = content.strip() if content else None
+        namespace = self.namespace_for_user(memory_key)
+
+        try:
+            if action == "create":
+                if normalized_id:
+                    return f"{action} 长期记忆时不要提供 memory_id"
+                if not normalized_content:
+                    return f"{action} 长期记忆需要提供 content"
+                new_id = str(uuid.uuid4())
+                await self.store.aput(
+                    namespace,
+                    key=new_id,
+                    value={"content": normalized_content},
+                )
+                await self._touch_memory_key(memory_key, query=normalized_content)
+                return f"created memory {new_id} for user_id={target_user_id}"
+
+            if not normalized_id:
+                return f"{action} 长期记忆需要提供 memory_id"
+
+            existing = await self.store.aget(namespace, normalized_id)
+            if existing is None:
+                return f"user_id={target_user_id} 中没有找到 memory_id={normalized_id}"
+
+            if action == "delete":
+                await self.store.adelete(namespace, normalized_id)
+                await self._touch_memory_key(
+                    memory_key, query=f"delete:{normalized_id}"
+                )
+                return f"deleted memory {normalized_id} for user_id={target_user_id}"
+
+            if not normalized_content:
+                return f"{action} 长期记忆需要提供 content"
+
+            await self.store.aput(
+                namespace,
+                key=normalized_id,
+                value={"content": normalized_content},
+            )
+            await self._touch_memory_key(memory_key, query=normalized_content)
+            return f"updated memory {normalized_id} for user_id={target_user_id}"
+        except Exception:
+            logging.exception(
+                "Failed to %s mention memory for target_user_id=%s memory_id=%s",
+                action,
+                target_user_id,
+                normalized_id,
+            )
+            return "长期记忆操作失败"
+
+    async def _touch_memory_key(
+        self,
+        memory_key: str,
+        *,
+        query: Optional[str] = None,
+    ) -> None:
+        try:
+            if self.postgres is not None:
+                await self.postgres.touch_mention_memory_key(
+                    memory_key,
+                    query=query,
+                )
+        except Exception:
+            logging.exception(
+                "Failed to update mention memory metadata for user=%s",
+                memory_key,
+            )
+
+    @staticmethod
+    def _normalize_limit(limit: int) -> int:
+        return max(1, min(limit, 20))
 
     async def _close_store_context(self) -> None:
         if not self._store_context:
