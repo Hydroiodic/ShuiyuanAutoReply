@@ -23,6 +23,10 @@ if not base_url:
 image_local_save_path = os.getenv("IMAGE_LOCAL_SAVE_PATH", "./generated_images")
 os.makedirs(image_local_save_path, exist_ok=True)
 
+image_token_saving_mode = os.getenv(
+    "IMAGE_TOOL_TOKEN_SAVING_MODE", "False"
+).lower() in {"1", "true", "yes", "on"}
+
 
 shuiyuan_model: Optional[ShuiyuanModel] = None
 
@@ -175,6 +179,9 @@ async def generate_image(text: str, image_urls: Optional[List[str]] = None) -> s
     )
 
     try:
+        # Some additional kwargs for image generation
+        generation_kwargs = {"quality": "low"} if image_token_saving_mode else {}
+
         # Use the OpenAI API to generate an image based on the provided text prompt
         if image_urls:
             # Download the reference images and convert them to byte data
@@ -191,6 +198,7 @@ async def generate_image(text: str, image_urls: Optional[List[str]] = None) -> s
                 model="gpt-image-2",
                 output_format="jpeg",
                 n=1,
+                **generation_kwargs,
             )
         else:
             # Generate a new image with the provided text prompt without any reference images
@@ -200,6 +208,7 @@ async def generate_image(text: str, image_urls: Optional[List[str]] = None) -> s
                 output_format="jpeg",
                 moderation="low",
                 n=1,
+                **generation_kwargs,
             )
         base64_image = response.data[0].b64_json
         decoded_image = base64.b64decode(base64_image)

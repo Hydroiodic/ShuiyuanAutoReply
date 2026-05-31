@@ -99,7 +99,7 @@ async def execute_python_script(code: str) -> str:
 
         exit_code = wait_result.get("StatusCode", 0)
         logs = await loop.run_in_executor(None, container.logs)
-        output = logs.decode("utf-8").strip()[:256]
+        output = logs.decode("utf-8").strip()[:512]
 
         if exit_code != 0:
             return f"Execution Failed (Exit Code {exit_code}):\n{output}"
@@ -189,7 +189,7 @@ async def execute_bash_command(command: str) -> str:
 
         exit_code = wait_result.get("StatusCode", 0)
         logs = await loop.run_in_executor(None, container.logs)
-        output = logs.decode("utf-8").strip()[:256]
+        output = logs.decode("utf-8").strip()[:512]
 
         if exit_code != 0:
             return f"Execution Failed (Exit Code {exit_code}):\n{output}"
