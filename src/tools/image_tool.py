@@ -3,7 +3,7 @@ import base64
 import logging
 import os
 import traceback
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import aiohttp
 import shuiyuan_auto_reply.openrouter.openrouter_model
@@ -150,6 +150,23 @@ async def _urls_to_bytes(image_urls: List[str]) -> List[bytes] | str:
     return byte_data_list
 
 
+def _image_upload_file(byte_data: bytes, index: int) -> Tuple[str, bytes, str]:
+    """
+    Convert raw image bytes to an OpenAI file tuple with a supported MIME type.
+    """
+    if byte_data[:3] == bytes([0xFF, 0xD8, 0xFF]):
+        return (f"reference_{index}.jpg", byte_data, "image/jpeg")
+    if byte_data[:8] == bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]):
+        return (f"reference_{index}.png", byte_data, "image/png")
+    if byte_data.startswith(b"RIFF") and byte_data[8:12] == b"WEBP":
+        return (f"reference_{index}.webp", byte_data, "image/webp")
+
+    raise ValueError(
+        "Unsupported image format for OpenAI image edit. "
+        "Only JPEG, PNG, and WEBP are supported."
+    )
+
+
 @mcp.tool()
 async def generate_image(text: str, image_urls: Optional[List[str]] = None) -> str:
     """
@@ -191,10 +208,15 @@ async def generate_image(text: str, image_urls: Optional[List[str]] = None) -> s
             if isinstance(image_bytes_list, str):
                 return image_bytes_list
 
+            image_files = [
+                _image_upload_file(byte_data, index)
+                for index, byte_data in enumerate(image_bytes_list)
+            ]
+
             # Edit the image with the provided reference images and the text prompt
             response = await client.images.edit(
                 prompt=text,
-                image=image_bytes_list,
+                image=image_files,
                 model="gpt-image-2",
                 output_format="jpeg",
                 n=1,
