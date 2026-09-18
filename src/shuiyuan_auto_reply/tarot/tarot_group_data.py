@@ -105,7 +105,7 @@ class BaseTarotGroup:
         return {}
 
     @classmethod
-    def match_score(cls, question: str) -> int:
+    def match_score(cls, question: str) -> float:
         """
         Calculate the match score for the question based on keywords.
 

@@ -1,17 +1,16 @@
 import asyncio
 import logging
-import random
 import traceback
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from ..constants import settings
 from .objects import TimeInADay
+from .reply_utils import generate_random_string, make_unique_reply
 from .shuiyuan_model import ShuiyuanModel
 
 
-class BaseTopicModel:
+class BaseTopicModel(ABC):
     """
     A class to represent a topic model.
     """
@@ -29,34 +28,16 @@ class BaseTopicModel:
         self.scheduler = AsyncIOScheduler()
         self._bg_tasks = set()
 
-    @staticmethod
-    def _generate_random_string(length: int) -> str:
-        """
-        Generate a random string of a given length.
+    # Shared helpers, kept as static methods for backward compatibility
+    _generate_random_string = staticmethod(generate_random_string)
+    _make_unique_reply = staticmethod(make_unique_reply)
 
-        :param length: The length of the random string to generate.
-        :return: A random string of the specified length.
-        """
-        return "".join(
-            random.sample(
-                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-                k=length,
+    def _on_bg_task_done(self, task: "asyncio.Task") -> None:
+        self._bg_tasks.discard(task)
+        if not task.cancelled() and task.exception() is not None:
+            logging.error(
+                "Background post routine failed", exc_info=task.exception()
             )
-        )
-
-    @staticmethod
-    def _make_unique_reply(base: str) -> str:
-        """
-        Append a random string to the base reply to make it unique.
-
-        :param base: The base reply string.
-        :return: The unique reply string.
-        """
-        return (
-            f"{base}\n\n"
-            f"<!-- {BaseTopicModel._generate_random_string(20)} -->\n"
-            f"{settings.auto_reply_tag}"
-        )
 
     @abstractmethod
     async def _new_post_routine(self, post_id: int) -> None:
@@ -93,6 +74,8 @@ class BaseTopicModel:
                     f"Failed to get topic details for {self.topic_id}, "
                     f"traceback is as follows:\n{traceback.format_exc()}"
                 )
+                # Back off briefly so a persistent failure cannot busy-loop
+                await asyncio.sleep(5.0)
                 continue
 
             # OK, let's difference the current stream with the new one
@@ -118,8 +101,8 @@ class BaseTopicModel:
                     task = asyncio.create_task(self._new_post_routine(post_id))
                     # keep a reference so tasks aren't garbage-collected
                     self._bg_tasks.add(task)
-                    # remove task from the set when done
-                    task.add_done_callback(lambda t, s=self._bg_tasks: s.discard(t))
+                    # remove task from the set (and log any error) when done
+                    task.add_done_callback(self._on_bg_task_done)
 
             # Update the stream list with the new stream
             self.stream_list = new_stream

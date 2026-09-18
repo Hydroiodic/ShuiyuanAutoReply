@@ -128,8 +128,9 @@ class AsyncNeo4jDatabaseManager:
         """
         Asynchronously compute the embedding and store the sentence.
         """
-        # Encode the sentence to get its embedding
-        embeddings = self.model.encode(sentences)
+        # Encode the sentence to get its embedding. The forward pass is
+        # CPU-bound synchronous work, so run it off the event loop.
+        embeddings = await asyncio.to_thread(self.model.encode, sentences)
 
         # Batch writes to avoid creating too many concurrent tasks.
         store_routine = []
@@ -151,8 +152,9 @@ class AsyncNeo4jDatabaseManager:
         """
         Asynchronously search for similar sentences based on the query text.
         """
-        # Calculate embedding for the query text
-        embedding = self.model.encode([query_text])[0].tolist()
+        # Calculate embedding for the query text off the event loop
+        embeddings = await asyncio.to_thread(self.model.encode, [query_text])
+        embedding = embeddings[0].tolist()
 
         # Vector query is done with Cypher, then mapped into typed response objects.
         rows, _ = await asyncio.to_thread(

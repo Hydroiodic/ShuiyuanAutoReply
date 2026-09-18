@@ -40,12 +40,9 @@ class AShareModel:
             and end_date != ""
             and frequency in ["240m", "1200m", "7200m"]
         ):
-            # Convert to datetime if not already
-            end_date = (
-                pd.to_datetime(end_date)
-                if not isinstance(end_date, datetime.date)
-                else end_date
-            )
+            # Always normalize to a Timestamp: a plain datetime.date cannot be
+            # subtracted from datetime.now() below
+            end_date = pd.to_datetime(end_date)
             # Determine the unit based on frequency
             unit = 4 if frequency == "1200m" else 29 if frequency == "7200m" else 1
             # Calculate the number of trading days between end_date and today
@@ -168,7 +165,7 @@ class AShareModel:
             "60m",
         ]:
             # Only tencent supports 1-minute data
-            if frequency in "1m":
+            if frequency == "1m":
                 return await AShareModel._get_price_min_tx(
                     xcode,
                     end_date=end_date,

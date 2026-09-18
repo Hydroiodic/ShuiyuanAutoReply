@@ -73,10 +73,10 @@ class MentionOpenRouterModel(MentionChatModel):
         res = ""
         if isinstance(raw_output, list):
             for item in raw_output:
-                if isinstance(item, dict) and "text" in item:
-                    res += item["text"]
-                if hasattr(item, "text"):
-                    res += item.text
                 if isinstance(item, str):
                     res += item
+                elif isinstance(item, dict) and "text" in item:
+                    res += item["text"]
+                elif hasattr(item, "text"):
+                    res += item.text
         return res.strip()

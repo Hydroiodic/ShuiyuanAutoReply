@@ -1,16 +1,15 @@
 import asyncio
 import logging
-import random
 import traceback
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from typing import List
 
-from ..constants import settings
 from .objects import UserActionDetails
+from .reply_utils import generate_random_string, make_unique_reply
 from .shuiyuan_model import ShuiyuanModel
 
 
-class BaseUserActionModel:
+class BaseUserActionModel(ABC):
     """
     A class to represent a mention model.
     """
@@ -29,34 +28,16 @@ class BaseUserActionModel:
         self.stream_list = []
         self._bg_tasks = set()
 
-    @staticmethod
-    def _generate_random_string(length: int) -> str:
-        """
-        Generate a random string of a given length.
+    # Shared helpers, kept as static methods for backward compatibility
+    _generate_random_string = staticmethod(generate_random_string)
+    _make_unique_reply = staticmethod(make_unique_reply)
 
-        :param length: The length of the random string to generate.
-        :return: A random string of the specified length.
-        """
-        return "".join(
-            random.sample(
-                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-                k=length,
+    def _on_bg_task_done(self, task: "asyncio.Task") -> None:
+        self._bg_tasks.discard(task)
+        if not task.cancelled() and task.exception() is not None:
+            logging.error(
+                "Background action routine failed", exc_info=task.exception()
             )
-        )
-
-    @staticmethod
-    def _make_unique_reply(base: str) -> str:
-        """
-        Append a random string to the base reply to make it unique.
-
-        :param base: The base reply string.
-        :return: The unique reply string.
-        """
-        return (
-            f"{base}\n\n"
-            f"<!-- {BaseUserActionModel._generate_random_string(20)} -->\n"
-            f"{settings.auto_reply_tag}"
-        )
 
     @abstractmethod
     async def _new_action_routine(self, action: UserActionDetails) -> None:
@@ -83,6 +64,8 @@ class BaseUserActionModel:
                     f"Failed to get action details for {self.username}, "
                     f"traceback is as follows:\n{traceback.format_exc()}"
                 )
+                # Back off briefly so a persistent failure cannot busy-loop
+                await asyncio.sleep(5.0)
                 continue
 
             # OK, let's difference the current stream with the new one
@@ -93,23 +76,23 @@ class BaseUserActionModel:
                 self.stream_list = new_stream
                 continue
 
-            # Try to find the last known post in the new stream
-            last_post_index = len(new_stream)
-            for i, post_id in enumerate(new_stream):
-                if post_id in self.stream_list:
-                    last_post_index = i
-                    break
+            # Only process actions on posts we haven't seen before. Cutting at
+            # the first known post_id would drop genuinely new actions listed
+            # after an old one, and reprocess everything when no overlap exists.
+            known_post_ids = set(self.stream_list)
+            new_actions = [
+                detail
+                for detail in action_details
+                if detail.post_id not in known_post_ids
+            ]
 
-            # Slice the new stream to get only the new posts
-            new_actions = action_details[:last_post_index]
-
-            # OK, we have find the new posts, we should do some routine with them
+            # OK, we have found the new posts, we should do some routine with them
             for mention in new_actions:
                 task = asyncio.create_task(self._new_action_routine(mention))
                 # keep a reference so tasks aren't garbage-collected
                 self._bg_tasks.add(task)
-                # remove task from the set when done
-                task.add_done_callback(lambda t, s=self._bg_tasks: s.discard(t))
+                # remove task from the set (and log any error) when done
+                task.add_done_callback(self._on_bg_task_done)
 
             # Update the stream list with the new stream
             self.stream_list = new_stream

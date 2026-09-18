@@ -2,7 +2,7 @@ import logging
 import random
 import re
 import traceback
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from shuiyuan_auto_reply.constants import settings
 from shuiyuan_auto_reply.shuiyuan.objects import User, UserActionDetails
@@ -16,6 +16,12 @@ class MentionModel(BaseUserActionModel):
     """
     A class to represent a mention model for robot auto-replies.
     """
+
+    _POLL_USAGE_HINT = (
+        "请按照格式`【抽选】topic_id/post_number`或`【抽选】post_number`来抽选，"
+        "或者直接回复包含了投票的帖子来进行抽选，"
+        "例如`【抽选】2026/1896`表示选取ID为2026话题的第1896层里的投票进行随机抽选\n"
+    )
 
     def __init__(self, model: ShuiyuanModel, username: str):
         """
@@ -38,14 +44,14 @@ class MentionModel(BaseUserActionModel):
         :param prompt: The prompt string to look for.
         :return: The parsed text after the prompt or None if prompt not found.
         """
-        # Get the text after the first occurrence of the prompt
-        irst_occurrence = raw.find(prompt)
-        if irst_occurrence == -1:
+        # Get the text after the first occurrence of the prompt,
+        # keeping any later occurrences of the same keyword intact
+        first_occurrence = raw.find(prompt)
+        if first_occurrence == -1:
             return None
-        raw = raw[irst_occurrence:]
+        raw = raw[first_occurrence + len(prompt) :]
 
-        # Remove the keyword itself
-        return ShuiyuanModel.remove_shuiyuan_signature(raw.replace(prompt, "")).strip()
+        return ShuiyuanModel.remove_shuiyuan_signature(raw).strip()
 
     async def _pumpkin_condition(
         self, topic_id: int, reply_to_post_number: Optional[int], raw: str, user: User
@@ -68,6 +74,8 @@ class MentionModel(BaseUserActionModel):
         reply = await self.mention_openrouter_model.get_pumpkin_response(
             topic_id, reply_to_post_number, raw, user
         )
+        if not reply:
+            reply = "抱歉，南瓜bot暂时没能生成回复，请稍后再试"
         reply = f"{reply}\n\n（内容由AI生成，仅供参考）"
         return MentionModel._make_unique_reply(reply)
 
@@ -145,24 +153,18 @@ class MentionModel(BaseUserActionModel):
         if "【抽选】" not in raw:
             return None
 
-        # Now we check if the post is replying to another post
-        if reply_to_post_number is None:
-            # Flow B, use regular expression to extract the topic_id/post_number
-            r = re.search(r"【抽选】\s*(\d+)(?:/(\d+))?", raw, re.IGNORECASE)
-            if r is None:
-                return MentionModel._make_unique_reply(
-                    "请按照格式`【抽选】topic_id/post_number`或`【抽选】post_number`来抽选，"
-                    "或者直接回复包含了投票的帖子来进行抽选，"
-                    "例如`【抽选】2026/1896`表示选取ID为2026话题的第1896层里的投票进行随机抽选\n"
-                )
-
+        # An explicit topic_id/post_number spec takes precedence over the replied-to post
+        r = re.search(r"【抽选】\s*(\d+)(?:/(\d+))?", raw)
+        if r is not None:
             if r.group(2):
                 topic_id = int(r.group(1))
                 reply_to_post_number = int(r.group(2))
             else:
                 reply_to_post_number = int(r.group(1))
+        elif reply_to_post_number is None:
+            return MentionModel._make_unique_reply(MentionModel._POLL_USAGE_HINT)
 
-        # Flow A, let's get the post details
+        # Now let's get the post details
         try:
             post_details = await self.model.get_post_details_by_post_number(
                 topic_id, reply_to_post_number
@@ -175,18 +177,14 @@ class MentionModel(BaseUserActionModel):
             )
             return MentionModel._make_unique_reply(
                 "无法获取被抽选的帖子详情，请检查你的输入是否正确，或者稍后再试\n"
-                "请按照格式`【抽选】topic_id/post_number`或`【抽选】post_number`来抽选，"
-                "或者直接回复包含了投票的帖子来进行抽选，"
-                "例如`【抽选】2026/1896`表示选取ID为2026话题的第1896层里的投票进行随机抽选\n"
+                + MentionModel._POLL_USAGE_HINT
             )
 
         # Check if the post contains a poll
         if post_details.polls is None:
             return MentionModel._make_unique_reply(
                 "被抽选的帖子中不包含投票，无法进行抽选，请检查你的输入或者稍后再试\n"
-                "请按照格式`【抽选】topic_id/post_number`或`【抽选】post_number`来抽选，"
-                "或者直接回复包含了投票的帖子来进行抽选，"
-                "例如`【抽选】2026/1896`表示选取ID为2026话题的第1896层里的投票进行随机抽选\n"
+                + MentionModel._POLL_USAGE_HINT
             )
 
         # Check the visibility of the polls
@@ -207,17 +205,16 @@ class MentionModel(BaseUserActionModel):
         # Try to get the full list of voters
         voters = await self.model.get_voters_by_post_id(post_details.id)
 
-        # Now we randomly select one of the options for all polls
+        # Now we randomly select one voter for each option of all polls
         selected_options: Dict[str, User | str] = {}
-        for poll_id, users in voters.voters.items():
+        for option_id, users in voters.voters.items():
             # If there are no users who voted for this option, we should skip it
             if not users:
-                selected_options[poll_id] = "参与投票人数为0，无法抽选"
+                selected_options[option_id] = "参与投票人数为0，无法抽选"
                 continue
 
             # Now randomly select one user from the list of users
-            selected_user = random.choice(users)
-            selected_options[poll_id] = selected_user
+            selected_options[option_id] = random.choice(users)
 
         # Now we have to match poll_id with their contents in post_details
         results: Dict[str, Dict[str, User | str] | str] = {}
@@ -229,7 +226,7 @@ class MentionModel(BaseUserActionModel):
                 results[current_poll_title] = "该投票不可见或类型不支持，无法抽选"
                 continue
 
-            current_poll_result: Dict[str, List[User] | str] = {}
+            current_poll_result: Dict[str, User | str] = {}
             for option in poll.options:
                 if option.id in selected_options:
                     current_poll_result[option.html] = selected_options[option.id]
@@ -319,8 +316,11 @@ class MentionModel(BaseUserActionModel):
             if settings.auto_reply_tag in post_details.raw:
                 return
 
-            # Check if the mention actually exists
-            r = re.search(rf"@{self.username}", post_details.raw, re.IGNORECASE)
+            # Check if the mention actually exists (word boundary avoids
+            # matching usernames that merely share this one as a prefix)
+            r = re.search(
+                rf"@{re.escape(self.username)}\b", post_details.raw, re.IGNORECASE
+            )
             if r is None:
                 return
 
@@ -371,8 +371,14 @@ class MentionModel(BaseUserActionModel):
 
         finally:
             if text is not None:
-                await self.model.reply_to_post(
-                    text,
-                    action.topic_id,
-                    action.post_number,
-                )
+                try:
+                    await self.model.reply_to_post(
+                        text,
+                        action.topic_id,
+                        action.post_number,
+                    )
+                except Exception:
+                    logging.error(
+                        f"Failed to reply to post {action.post_id}, "
+                        f"traceback is as follows:\n{traceback.format_exc()}"
+                    )

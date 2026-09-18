@@ -249,7 +249,9 @@ class AsyncPostgresRecordDatabaseManager:
             result = await session.execute(select(User))
             return list(result.scalars().all())
 
-    @async_retry(default=None)
+    # No retry: re-running a non-idempotent insert after a partial failure
+    # (e.g. commit succeeded but refresh failed) would duplicate the row
+    @async_retry(retries=1, default=None)
     async def add_record(self, user_id: int, record_str: str) -> Optional[Record]:
         """Add a record, creating the user if it does not exist."""
         async with self.async_session() as session:
@@ -346,7 +348,8 @@ class AsyncPostgresRecordDatabaseManager:
                 await session.rollback()
                 raise
 
-    @async_retry(default=None)
+    # No retry: same non-idempotent insert concern as add_record
+    @async_retry(retries=1, default=None)
     async def add_alias(self, user_id: int, alias_str: str) -> Optional[Alias]:
         """Add an alias, creating the user if it does not exist."""
         async with self.async_session() as session:

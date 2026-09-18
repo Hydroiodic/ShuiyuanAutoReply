@@ -248,11 +248,17 @@ class StockTopicModel(BaseTopicModel):
             )
         finally:
             if text is not None:
-                await self.model.reply_to_post(
-                    text,
-                    self.topic_id,
-                    post_details.post_number,
-                )
+                try:
+                    await self.model.reply_to_post(
+                        text,
+                        self.topic_id,
+                        post_details.post_number,
+                    )
+                except Exception:
+                    logging.error(
+                        f"Failed to reply to post {post_id}, "
+                        f"traceback is as follows:\n{traceback.format_exc()}"
+                    )
 
     async def _daily_routine(self) -> None:
         """
@@ -292,4 +298,10 @@ class StockTopicModel(BaseTopicModel):
             )
         finally:
             if text is not None:
-                await self.model.reply_to_post(text, self.topic_id)
+                try:
+                    await self.model.reply_to_post(text, self.topic_id)
+                except Exception:
+                    logging.error(
+                        f"Failed to reply to topic {self.topic_id}, "
+                        f"traceback is as follows:\n{traceback.format_exc()}"
+                    )

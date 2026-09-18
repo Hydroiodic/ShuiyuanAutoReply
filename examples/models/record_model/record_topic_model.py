@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import re
 import traceback
 from datetime import datetime
 from typing import Optional
@@ -59,14 +58,14 @@ class RecordTopicModel(BaseTopicModel):
         :param prompt: The prompt string to look for.
         :return: The parsed text after the prompt or None if prompt not found.
         """
-        # Get the text after the first occurrence of the prompt
-        irst_occurrence = raw.find(prompt)
-        if irst_occurrence == -1:
+        # Get the text after the first occurrence of the prompt,
+        # keeping any later occurrences of the same keyword intact
+        first_occurrence = raw.find(prompt)
+        if first_occurrence == -1:
             return None
-        raw = raw[irst_occurrence:]
+        raw = raw[first_occurrence + len(prompt) :]
 
-        # Remove the keyword itself
-        return ShuiyuanModel.remove_shuiyuan_signature(raw.replace(prompt, "")).strip()
+        return ShuiyuanModel.remove_shuiyuan_signature(raw).strip()
 
     async def _add_record_condition(self, raw: str, user: User) -> Optional[str]:
         """
@@ -203,7 +202,7 @@ class RecordTopicModel(BaseTopicModel):
             db_user = await record_manager.get_or_add_user(sy_user.id)
 
         if not db_user:
-            return BaseTopicModel._make_unique_reply(f"数据库错误，请稍后再试")
+            return BaseTopicModel._make_unique_reply("数据库错误，请稍后再试")
 
         # Check if the user has enabled recording
         if db_user.enable_record != 1:
@@ -260,7 +259,7 @@ class RecordTopicModel(BaseTopicModel):
             db_user = await record_manager.get_or_add_user(sy_user.id)
 
         if not db_user:
-            return BaseTopicModel._make_unique_reply(f"数据库错误，请稍后再试")
+            return BaseTopicModel._make_unique_reply("数据库错误，请稍后再试")
 
         # Check if the user has enabled recording
         if db_user.enable_record != 1:
@@ -319,6 +318,11 @@ class RecordTopicModel(BaseTopicModel):
         db_user = await record_manager.get_or_add_user(sy_user.id)
         if not db_user:
             return BaseTopicModel._make_unique_reply("创建用户记录失败，请稍后再试")
+
+        # Only the user themselves, or users who allow others to manage their
+        # records, can have aliases bound to their account
+        if user.id != db_user.user_id and db_user.allow_others != 1:
+            return BaseTopicModel._make_unique_reply("您没有权限为该用户设置别名")
 
         # Set the alias for the user
         success = await record_manager.add_alias(db_user.user_id, alias.lower())
@@ -526,11 +530,17 @@ class RecordTopicModel(BaseTopicModel):
 
         finally:
             if text is not None:
-                await self.model.reply_to_post(
-                    text,
-                    self.topic_id,
-                    post_details.post_number,
-                )
+                try:
+                    await self.model.reply_to_post(
+                        text,
+                        self.topic_id,
+                        post_details.post_number,
+                    )
+                except Exception:
+                    logging.error(
+                        f"Failed to reply to post {post_id}, "
+                        f"traceback is as follows:\n{traceback.format_exc()}"
+                    )
 
     async def _daily_routine(self) -> None:
         record_manager = await self._get_record_manager()

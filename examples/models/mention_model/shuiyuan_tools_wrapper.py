@@ -9,11 +9,17 @@ from .shuiyuan_tools_objects import PostShort, UserShort
 class ShuiyuanToolsWrapper:
     """
     A wrapper around the ShuiyuanModel to provide tools for the OpenRouter model.
+    Tool methods never raise; failures are returned as strings so the LLM can
+    see what went wrong and adapt.
     """
 
     def __init__(self, shuiyuan_model: ShuiyuanModel):
         self.shuiyuan_model = shuiyuan_model
         self.image_tool = OpenRouterImageTool(shuiyuan_model)
+
+    @staticmethod
+    def _format_error(e: Exception) -> str:
+        return f"Tool call failed: {type(e).__name__}: {e}"
 
     async def search_user_by_term(
         self,
@@ -32,7 +38,7 @@ class ShuiyuanToolsWrapper:
             users = await self.shuiyuan_model.search_user_by_term(term)
             return [UserShort(user, include_avatar=include_avatar) for user in users]
         except Exception as e:
-            return str(e)
+            return self._format_error(e)
 
     async def search_user_by_user_id(
         self,
@@ -57,7 +63,7 @@ class ShuiyuanToolsWrapper:
                     user = full_user
             return UserShort(user, include_avatar=include_avatar) if user else None
         except Exception as e:
-            return str(e)
+            return self._format_error(e)
 
     async def search_post_details_by_optional_username_topic(
         self,
@@ -88,7 +94,7 @@ class ShuiyuanToolsWrapper:
                 for post in post_list
             ]
         except Exception as e:
-            return str(e)
+            return self._format_error(e)
 
     async def query_recent_posts_by_topic_id(
         self,
@@ -108,7 +114,7 @@ class ShuiyuanToolsWrapper:
             )
             return [PostShort(post, title) for post in posts]
         except Exception as e:
-            return str(e)
+            return self._format_error(e)
 
     async def get_post_details_by_post_number(
         self, topic_id: int, post_number: int
@@ -125,19 +131,22 @@ class ShuiyuanToolsWrapper:
         :return: An instance of PostShort containing the post information or error message.
         """
         try:
-            topic = await self.shuiyuan_model.get_topic_details(topic_id)
-            post = await self.shuiyuan_model.get_post_details_by_post_number(
-                topic_id,
-                post_number,
+            title, post = (
+                await self.shuiyuan_model.get_post_details_with_title_by_post_number(
+                    topic_id,
+                    post_number,
+                )
             )
-            return PostShort(post, topic.title)
+            return PostShort(post, title)
         except Exception as e:
-            return str(e)
+            return self._format_error(e)
 
     async def generate_image_and_upload(self, prompt: str) -> str:
         """
         Generate an image from a prompt and then return the Shuiyuan short URL.
         NOTE: To show this image in your reply, you have to use Markdown format like `![image]({short_url})`.
+        NOTE: This tool does NOT accept reference images; describe everything
+        needed (style, subject, composition) directly in the prompt text.
 
         :param prompt: The prompt to generate the image from.
         :return: The short URL of the uploaded image on Shuiyuan or error message.
@@ -149,4 +158,4 @@ class ShuiyuanToolsWrapper:
                 image_size="1K",
             )
         except Exception as e:
-            return str(e)
+            return self._format_error(e)

@@ -105,9 +105,16 @@ class ShuiyuanModel:
                 cookies = pickle.load(f)
                 session.cookie_jar.update_cookies(cookies)
 
-            # Update the shared session using Shuiyuan API
+            # Update the shared session using Shuiyuan API. If the CSRF
+            # refresh fails, close and uninstall the session so the next
+            # create() attempt does not reuse a broken one.
             cls._shared_session = session
-            await cls._update_cookies()
+            try:
+                await cls._update_cookies()
+            except BaseException:
+                cls._shared_session = None
+                await session.close()
+                raise
             return cls._shared_session
 
     @classmethod
@@ -153,10 +160,12 @@ class ShuiyuanModel:
         next_future = loop.create_future()
         cls._request_chain = next_future
 
-        # Wait until the previous request is done
-        await wait_for
-
         try:
+            # Wait until the previous request is done. This must be inside the
+            # try block: if this task is cancelled while waiting, next_future
+            # would otherwise never resolve and every later request would hang.
+            await wait_for
+
             # Calculate the wait time to enforce rate limiting
             now = time.monotonic()
             wait_time = cls._request_interval - (now - cls._last_request_ts)
@@ -196,16 +205,19 @@ class ShuiyuanModel:
         if reply_to_post_number is not None:
             form_data.add_field("reply_to_post_number", str(reply_to_post_number))
 
-        # OK, let's post it
-        while True:
+        # OK, let's post it (retry a bounded number of times on rate limiting)
+        max_attempts = 5
+        for attempt in range(max_attempts):
             response = await self._rate_limited_request(
                 "post", reply_url, data=form_data
             )
             if response.status == 200:
-                break
-            elif response.status == 429:
+                # Consume the body so the connection returns to the pool
+                await response.read()
+                return
+            elif response.status == 429 and attempt < max_attempts - 1:
                 logging.warning(f"Failed to reply to post: {await response.text()}")
-                await asyncio.sleep(1)
+                await asyncio.sleep(2 ** attempt)
             else:
                 raise Exception(f"Failed to reply to post: {await response.text()}")
 
@@ -276,15 +288,15 @@ class ShuiyuanModel:
         return from_dict(PostDetails, data)
 
     @async_retry(log_traceback=True)
-    async def get_post_details_by_post_number(
+    async def get_post_details_with_title_by_post_number(
         self, topic_id: int, post_number: int
-    ) -> PostDetails:
+    ) -> Tuple[str, PostDetails]:
         """
-        Get the details of a post by its topic ID and post number.
+        Get the topic title and the details of a post by its topic ID and post number.
 
         :param topic_id: The ID of the topic the post belongs to.
         :param post_number: The post number within the topic.
-        :return: An instance of PostDetails containing the post information.
+        :return: A tuple of the topic title and a PostDetails instance.
         """
         response = await self._rate_limited_request(
             "get",
@@ -296,10 +308,6 @@ class ShuiyuanModel:
         data = await response.json()
         post_stream = data.get("post_stream", {})
         posts = post_stream.get("posts", [])
-        if not posts:
-            raise Exception(
-                f"Post with number {post_number} not found in topic {topic_id}"
-            )
 
         # Find the specific post with the given post number
         post_data = next(
@@ -311,7 +319,22 @@ class ShuiyuanModel:
                 f"Post with number {post_number} not found in topic {topic_id}"
             )
 
-        return from_dict(PostDetails, post_data)
+        return data.get("title", ""), from_dict(PostDetails, post_data)
+
+    async def get_post_details_by_post_number(
+        self, topic_id: int, post_number: int
+    ) -> PostDetails:
+        """
+        Get the details of a post by its topic ID and post number.
+
+        :param topic_id: The ID of the topic the post belongs to.
+        :param post_number: The post number within the topic.
+        :return: An instance of PostDetails containing the post information.
+        """
+        _, post = await self.get_post_details_with_title_by_post_number(
+            topic_id, post_number
+        )
+        return post
 
     async def get_post_details_batch_by_topic_id(
         self, topic_id: int, post_ids: List[int]
@@ -328,6 +351,9 @@ class ShuiyuanModel:
             f"{get_topic_url}/{topic_id}/posts.json",
             params={"post_ids[]": post_ids, "include_raw": "true"},
         )
+        if response.status != 200:
+            raise Exception(f"Failed to get posts batch: {await response.text()}")
+
         data = await response.json()
         post_stream = data.get("post_stream", {})
         posts = post_stream.get("posts", [])
@@ -396,7 +422,7 @@ class ShuiyuanModel:
         )
 
         response = await self._rate_limited_request(
-            "post", upload_url, data=form_data, timeout=10
+            "post", upload_url, data=form_data, timeout=aiohttp.ClientTimeout(total=10)
         )
         if response.status != 200:
             raise Exception(f"Failed to upload image: {await response.text()}")
@@ -422,14 +448,14 @@ class ShuiyuanModel:
             # Upload the image and get the response
             response = await self.upload_image(image_bytes)
             return ImageURL("url", f"![img]({response.short_url})")
-        except Exception as e:
+        except Exception:
             # If try_base64 is False, we will not try to convert later
             if not try_base64:
                 logging.error(
                     f"Failed to upload image to Shuiyuan server, "
                     f"traceback is as follows:\n{traceback.format_exc()}"
                 )
-                raise e
+                raise
 
             # Log the error and traceback
             logging.warning(
@@ -448,12 +474,12 @@ class ShuiyuanModel:
                         "base64",
                         f'<img alt="img" src="data:image/jpeg;base64,{base64_image}" />',
                     )
-            except Exception as e:
+            except Exception:
                 logging.error(
                     f"Failed to convert image to base64 HTML code, "
                     f"traceback is as follows:\n{traceback.format_exc()}"
                 )
-                raise e
+                raise
 
     @staticmethod
     def compress_image_to_base64(
@@ -561,6 +587,7 @@ class ShuiyuanModel:
     @classmethod
     async def _close_shared_session(cls) -> None:
         # Lock to ensure no re-creation during closing
+        cls._ensure_locks()
         async with cls._session_init_lock:
             if cls._shared_session and not cls._shared_session.closed:
                 await cls._shared_session.close()
@@ -663,7 +690,10 @@ class ShuiyuanModel:
 
         result = {}
         for post in post_list[:limit]:
-            result.setdefault(topic_dict[post.topic_id].title, []).append(post)
+            # The search response may omit a topic entry for a post
+            topic = topic_dict.get(post.topic_id)
+            title = topic.title if topic else f"话题 {post.topic_id}"
+            result.setdefault(title, []).append(post)
 
         return result
 

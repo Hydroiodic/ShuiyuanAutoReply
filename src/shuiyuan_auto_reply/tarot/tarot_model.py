@@ -23,7 +23,7 @@ class TarotModel:
         self.tarot_data = self._load_tarot_data()
         self.tarot_group_model = TarotGroupModel()
 
-    def _load_tarot_data(self) -> None:
+    def _load_tarot_data(self) -> List[TarotCard]:
         """
         Load tarot card data from a JSON file.
         """

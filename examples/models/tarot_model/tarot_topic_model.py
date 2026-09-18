@@ -169,9 +169,10 @@ class TarotTopicModel(BaseTopicModel):
         )
         fortune_model = FortuneModel(username)
 
-        # Generate an image for the fortune today
+        # Generate an image for the fortune today. The rendering is CPU-bound
+        # synchronous work, so run it off the event loop.
         bytes_buffer = io.BytesIO()
-        fortune_img = fortune_model.generate_fortune()
+        fortune_img = await asyncio.to_thread(fortune_model.generate_fortune)
         fortune_img.save(bytes_buffer, skia.EncodedImageFormat.kJPEG)
 
         # Upload the image and get the response
@@ -214,7 +215,9 @@ class TarotTopicModel(BaseTopicModel):
         text: Optional[str] = None
 
         try:
-            # First let's try to get the post details
+            # First let's try to get the post details. This is kept in its own
+            # try block: if it fails, post_details is unbound and the finally
+            # block below could not reference it.
             post_details = await self.model.get_post_details(post_id)
             post_user = User(
                 post_details.user_id,
@@ -227,6 +230,14 @@ class TarotTopicModel(BaseTopicModel):
                 logging.warning(f"Post {post_id} does not have raw content, skipping.")
                 return
 
+        except Exception:
+            logging.error(
+                f"Failed to get post details for {post_id}, "
+                f"traceback is as follows:\n{traceback.format_exc()}"
+            )
+            return
+
+        try:
             # If the post is an auto-reply, we should skip it
             if settings.auto_reply_tag in post_details.raw:
                 return
@@ -265,9 +276,9 @@ class TarotTopicModel(BaseTopicModel):
                 return
 
         except Exception:
-            # If we failed to get the post details or any other error occurred
+            # If any error occurred while processing the post
             logging.error(
-                f"Failed to get post details for {post_id}, "
+                f"Failed to process post {post_id}, "
                 f"traceback is as follows:\n{traceback.format_exc()}"
             )
             # We should reply to the post with an error message
@@ -277,11 +288,17 @@ class TarotTopicModel(BaseTopicModel):
 
         finally:
             if text is not None:
-                await self.model.reply_to_post(
-                    text,
-                    self.topic_id,
-                    post_details.post_number,
-                )
+                try:
+                    await self.model.reply_to_post(
+                        text,
+                        self.topic_id,
+                        post_details.post_number,
+                    )
+                except Exception:
+                    logging.error(
+                        f"Failed to reply to post {post_id}, "
+                        f"traceback is as follows:\n{traceback.format_exc()}"
+                    )
 
     async def _daily_routine(self) -> None:
         raise NotImplementedError(

@@ -16,9 +16,9 @@ dotenv.load_dotenv()
 from shuiyuan_auto_reply.shuiyuan.objects import TimeInADay
 from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 
-from .models.mention_model.mention_model import MentionModel
+# from .models.mention_model.mention_model import MentionModel
 from .models.record_model.record_topic_model import RecordTopicModel
-from .models.stock_model.stock_topic_model import StockTopicModel
+# from .models.stock_model.stock_topic_model import StockTopicModel
 from .models.tarot_model.tarot_topic_model import TarotTopicModel
 
 
@@ -30,8 +30,8 @@ async def main():
 
     async with await ShuiyuanModel.create() as model:
         # Let's try to get the post streams
-        mention_model = MentionModel(model, "MonkeysPumpkin")
-        tarot_topic_model = TarotTopicModel(model, 456849)
+        # mention_model = MentionModel(model, "MonkeysPumpkin")
+        tarot_topic_model = TarotTopicModel(model, 509792)
         # stock_topic_model = StockTopicModel(model, 392286)
         record_topic_model = RecordTopicModel(model, 476843)
 
@@ -44,7 +44,7 @@ async def main():
         record_topic_model.start_scheduler()
 
         await asyncio.gather(
-            mention_model.watch_new_action_routine(),
+            # mention_model.watch_new_action_routine(),
             tarot_topic_model.watch_new_post_routine(),
             # stock_topic_model.watch_new_post_routine(),
             record_topic_model.watch_new_post_routine(),
