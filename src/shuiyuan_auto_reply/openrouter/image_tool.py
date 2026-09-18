@@ -13,7 +13,7 @@ from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 
 from .openrouter_model import BaseOpenRouterModel, openrouter_model
 
-DEFAULT_OPENROUTER_IMAGE_MODEL = "google/gemini-3.1-flash-image-preview"
+DEFAULT_OPENROUTER_IMAGE_MODEL = "google/gemini-3.1-flash-image"
 _DATA_URL_RE = re.compile(r"^data:(?P<mime>[-\w.]+/[-\w.+]+);base64,(?P<data>.+)$")
 _SUPPORTED_ASPECT_RATIOS = {
     "1:1",

@@ -34,7 +34,7 @@ normalize_socks_proxy_env()
 from openai import AsyncOpenAI
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_OPENROUTER_MODEL = "google/gemini-3.1-flash-lite-preview"
+DEFAULT_OPENROUTER_MODEL = "google/gemini-3.5-flash-lite"
 DEFAULT_OPENROUTER_MAX_RETRIES = 5
 OPENROUTER_APP_REFERER = "https://github.com/Hydroiodic/ShuiyuanAutoReply"
 OPENROUTER_APP_TITLE = "ShuiyuanAutoReply"
