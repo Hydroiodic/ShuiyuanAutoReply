@@ -10,9 +10,12 @@ from PIL import Image
 
 from shuiyuan_auto_reply.ashare.ashare_model import AShareModel
 from shuiyuan_auto_reply.ashare.objects import StockData
-from shuiyuan_auto_reply.constants import settings
+from shuiyuan_auto_reply.shuiyuan.objects import PostDetails, User
+from shuiyuan_auto_reply.shuiyuan.reply_utils import make_unique_reply
 from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 from shuiyuan_auto_reply.shuiyuan.topic_model import BaseTopicModel
+
+from ..common import handle_post_and_reply
 
 
 class StockTopicModel(BaseTopicModel):
@@ -92,7 +95,7 @@ class StockTopicModel(BaseTopicModel):
         return response.data
 
     @staticmethod
-    def _colorize_string(text: str, color: str) -> str:
+    def _colorize_string(text: object, color: str) -> str:
         """
         Colorize a string with the given color.
 
@@ -157,7 +160,7 @@ class StockTopicModel(BaseTopicModel):
             or (not stock_code.startswith("sh") and not stock_code.startswith("sz"))
             or not stock_code[2:].isdigit()
         ):
-            return BaseTopicModel._make_unique_reply(
+            return make_unique_reply(
                 "股票代码格式错误，请使用“【A股】+股票代码”的格式，例如：【A股】sz000001。"
             )
 
@@ -169,14 +172,14 @@ class StockTopicModel(BaseTopicModel):
                 f"Failed to download or upload stock image for {stock_code}, "
                 f"traceback is as follows:\n{traceback.format_exc()}"
             )
-            return BaseTopicModel._make_unique_reply(
+            return make_unique_reply(
                 "抱歉，南瓜Bot遇到了一个错误，暂时无法获取股票数据，请稍后再试"
             )
 
         # If the image URL is None, which means the stock code is invalid
         # or the image could not be downloaded, we should return an error message
         if image_url is None:
-            return BaseTopicModel._make_unique_reply(
+            return make_unique_reply(
                 "未找到该股票或无法获取到分时图，请检查股票代码是否正确。\n\n"
             )
 
@@ -186,7 +189,7 @@ class StockTopicModel(BaseTopicModel):
         try:
             # Get the stock data from the AShareModel (Sina or Tencent API)
             stock_data = await self.ashare_model.get_stock_data(stock_code)
-            return BaseTopicModel._make_unique_reply(
+            return make_unique_reply(
                 f"{StockTopicModel._format_stock_data(stock_data)}\n"
                 f"{image_text}\n\n"
                 f"---\n[right]来自南瓜Bot自动获取数据[/right]"
@@ -196,7 +199,7 @@ class StockTopicModel(BaseTopicModel):
                 f"Failed to get stock data for {stock_code}, "
                 f"traceback is as follows:\n{traceback.format_exc()}"
             )
-            return BaseTopicModel._make_unique_reply(
+            return make_unique_reply(
                 "南瓜Bot无法获取到股票数据，仅展示分时图。\n\n"
                 f"{image_text}\n\n"
                 f"---\n[right]来自南瓜Bot自动获取数据[/right]\n"
@@ -210,55 +213,17 @@ class StockTopicModel(BaseTopicModel):
         :param post_id: The ID of the new post.
         :return: None
         """
+        await handle_post_and_reply(self.model, post_id, self._generate_reply)
 
-        # This is the text to reply to the post
-        text: Optional[str] = None
+    async def _generate_reply(self, post: PostDetails, user: User) -> Optional[str]:
+        """
+        Build the reply for a post: if it contains "【A股】", reply with the stock data.
 
-        try:
-            # First let's try to get the post details
-            post_details = await self.model.get_post_details(post_id)
-            # If the member "raw" is not present, we should skip it
-            if post_details.raw is None:
-                logging.warning(f"Post {post_id} does not have raw content, skipping.")
-                return
-        except Exception:
-            logging.error(
-                f"Failed to get post details for {post_id}, "
-                f"traceback is as follows:\n{traceback.format_exc()}"
-            )
-            return
-
-        try:
-            # If the post is an auto-reply, we should skip it
-            if settings.auto_reply_tag in post_details.raw:
-                return
-
-            # OK, check the content of the post
-            # If the post contains "A股", we will reply with the stock data
-            text = await self._stock_condition(post_details.raw)
-        except Exception:
-            # If we failed to get the post details or any other error occurred
-            logging.error(
-                f"Failed to process post {post_id}, "
-                f"traceback is as follows:\n{traceback.format_exc()}"
-            )
-            # We should reply to the post with an error message
-            text = BaseTopicModel._make_unique_reply(
-                "抱歉，南瓜Bot遇到了一个错误，暂时无法处理您的请求，请稍后再试"
-            )
-        finally:
-            if text is not None:
-                try:
-                    await self.model.reply_to_post(
-                        text,
-                        self.topic_id,
-                        post_details.post_number,
-                    )
-                except Exception:
-                    logging.error(
-                        f"Failed to reply to post {post_id}, "
-                        f"traceback is as follows:\n{traceback.format_exc()}"
-                    )
+        :param post: The details of the post.
+        :param user: The user who posted the content.
+        :return: The text to reply with, or None if no condition is met.
+        """
+        return await self._stock_condition(post.raw)
 
     async def _daily_routine(self) -> None:
         """
@@ -278,7 +243,7 @@ class StockTopicModel(BaseTopicModel):
             )
 
             # Let's arrange the text to reply
-            text = BaseTopicModel._make_unique_reply(
+            text = make_unique_reply(
                 f"**当前时间**(GMT+8)：{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}\n\n"
                 "**上证指数**\n"
                 f"{StockTopicModel._format_stock_data(shanghai_index)}\n"
@@ -293,7 +258,7 @@ class StockTopicModel(BaseTopicModel):
                 f"traceback is as follows:\n{traceback.format_exc()}"
             )
             # We should reply to the post with an error message
-            text = BaseTopicModel._make_unique_reply(
+            text = make_unique_reply(
                 "抱歉，南瓜bot遇到了一个错误，暂时无法获取到大盘数据，请稍后再试"
             )
         finally:

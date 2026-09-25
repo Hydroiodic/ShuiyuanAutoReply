@@ -3,7 +3,7 @@ import io
 import mimetypes
 import re
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 from uuid import uuid4
 
 from openai import BadRequestError
@@ -113,35 +113,37 @@ class OpenRouterImageTool(BaseOpenRouterModel):
                 body=exc.body,
             ) from exc
 
+        # OpenRouter-specific fields are not part of the OpenAI SDK types, so
+        # they may show up as attributes, in pydantic's model_extra or as dicts
         message = response.choices[0].message
-        images = getattr(message, "images", None)
-        if images is None and hasattr(message, "model_extra"):
-            images = message.model_extra.get("images")
-        if images is None and isinstance(message, dict):
-            images = message.get("images")
+        images = self._get_field(message, "images")
         if not images:
             raise ValueError("OpenRouter response did not contain generated images.")
 
-        image = images[0]
-        image_url = getattr(image, "image_url", None)
-        if image_url is None:
-            image_url = getattr(image, "imageUrl", None)
-        if image_url is None and hasattr(image, "model_extra"):
-            image_url = image.model_extra.get("image_url") or image.model_extra.get(
-                "imageUrl"
-            )
-        if image_url is None and isinstance(image, dict):
-            image_url = image.get("image_url") or image.get("imageUrl")
-
-        url = getattr(image_url, "url", None)
-        if url is None and hasattr(image_url, "model_extra"):
-            url = image_url.model_extra.get("url")
-        if url is None and isinstance(image_url, dict):
-            url = image_url.get("url")
+        image_url = self._get_field(images[0], "image_url", "imageUrl")
+        url = self._get_field(image_url, "url")
         if not url:
             raise ValueError("OpenRouter generated image did not contain a data URL.")
 
         return url
+
+    @staticmethod
+    def _get_field(obj: object, *names: str) -> Any:
+        """
+        Return the first non-empty field among names, looking at attributes,
+        pydantic extra fields and dict keys.
+        """
+        for name in names:
+            if isinstance(obj, dict):
+                value = obj.get(name)
+            else:
+                value = getattr(obj, name, None)
+                model_extra = getattr(obj, "model_extra", None)
+                if value is None and isinstance(model_extra, dict):
+                    value = model_extra.get(name)
+            if value:
+                return value
+        return None
 
     @staticmethod
     def _decode_data_url(data_url: str) -> Tuple[bytes, str]:

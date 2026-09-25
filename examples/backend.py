@@ -14,11 +14,11 @@ from pydantic import BaseModel
 # Add the parent directory to the system path for module resolution
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from examples.models.mention_model.mention_openrouter_model import (
+from examples.models.mention_model.mention_openrouter_model import (  # noqa: E402
     MentionOpenRouterModel,
 )
-from shuiyuan_auto_reply.shuiyuan.objects import User
-from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
+from shuiyuan_auto_reply.shuiyuan.objects import User  # noqa: E402
+from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel  # noqa: E402
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -81,7 +81,7 @@ async def lifespan(app: FastAPI):
         logger.info("机器人初始化成功！")
     except Exception as e:
         logger.error(f"初始化失败: {e}")
-        raise RuntimeError(f"Bot initialization failed: {e}")
+        raise RuntimeError(f"Bot initialization failed: {e}") from e
 
     yield
 
@@ -148,7 +148,7 @@ async def chat_endpoint(request: ChatRequest):
         return ChatResponse(session_id=session_id, reply=reply)
     except Exception as e:
         logger.error(f"处理消息时发生错误: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}") from e
 
 
 @app.post("/api/clear", response_model=ClearResponse)
@@ -187,7 +187,9 @@ async def clear_endpoint(request: ClearRequest):
         return ClearResponse(status="success", message="已成功清除会话和历史记录")
     except Exception as e:
         logger.error(f"清除底层模型历史时发生错误: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"清理模型历史失败: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"清理模型历史失败: {str(e)}"
+        ) from e
 
 
 @app.get("/api/health")

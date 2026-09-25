@@ -13,6 +13,11 @@ class User:
     name: Optional[str]
     avatar_template: Optional[str] = None
 
+    @property
+    def display_name(self) -> str:
+        """The nickname if the user has set one, otherwise the username."""
+        return self.name or self.username
+
 
 @dataclass
 class PollOption:

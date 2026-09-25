@@ -1,9 +1,8 @@
+from functools import cache
 from typing import Optional
 
 from ..openrouter.openrouter_model import BaseOpenRouterModel, openrouter_model
 from .tarot_group_data import tarot_groups
-
-_tarot_info_str: Optional[str] = None
 
 
 class TarotGroupModel(BaseOpenRouterModel):
@@ -16,17 +15,14 @@ class TarotGroupModel(BaseOpenRouterModel):
         self.model = openrouter_model("OPENROUTER_TAROT_GROUP_MODEL")
 
     @staticmethod
+    @cache
     def _get_tarot_info_str() -> str:
         """
         Get the tarot information string.
         """
-        global _tarot_info_str
-        if _tarot_info_str is None:
-            _tarot_info_str = "\n".join(
-                f"{group().group_name}: {group().group_description}"
-                for group in tarot_groups
-            )
-        return _tarot_info_str
+        return "\n".join(
+            f"{group.group_name}: {group.group_description}" for group in tarot_groups
+        )
 
     async def get_response(self, question: str) -> Optional[str]:
         """

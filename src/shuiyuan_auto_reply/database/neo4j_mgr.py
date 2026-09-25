@@ -19,6 +19,8 @@ from pydantic import BaseModel
 from shuiyuan_auto_reply.constants import settings
 from shuiyuan_auto_reply.embeddings import get_global_sentence_transformer
 
+from .utils import env_flag
+
 
 class SentenceNode(StructuredNode):
     __label__ = "Sentence"
@@ -66,12 +68,7 @@ class AsyncNeo4jDatabaseManager:
 
     @staticmethod
     def _strict_from_env() -> bool:
-        return os.getenv("NEO4J_STRICT", "").strip().lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }
+        return env_flag("NEO4J_STRICT")
 
     def _build_database_url(self) -> str:
         raw_url = self.database_url.strip()
@@ -134,7 +131,7 @@ class AsyncNeo4jDatabaseManager:
 
         # Batch writes to avoid creating too many concurrent tasks.
         store_routine = []
-        for sentence, embedding in zip(sentences, embeddings):
+        for sentence, embedding in zip(sentences, embeddings, strict=True):
             store_routine.append(self._store_sentence(sentence, embedding.tolist()))
             # Every 100 sentences, wait for current batch to finish
             if len(store_routine) >= 100:

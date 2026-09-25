@@ -1,10 +1,30 @@
 import random
-import re
-from typing import List, Literal, Optional, Tuple
+from typing import Iterator, List, Literal, Optional, Tuple
 
 import skia
 
-from .constants import *
+from .constants import (
+    ToDoData,
+    bg_size,
+    detail_font,
+    detail_size,
+    emoji_font,
+    emoji_pattern,
+    fortune_font,
+    fortune_list,
+    fortune_size,
+    lucky,
+    title_font,
+    title_size,
+    to_do_font,
+    to_do_font_bold,
+    to_do_list,
+    to_do_size,
+    too_lucky,
+    too_lucky_not_to_do,
+    too_unlucky,
+    too_unlucky_to_do,
+)
 
 
 class FortuneModel:
@@ -43,17 +63,8 @@ class FortuneModel:
         return random.sample(to_do_list, 4)
 
     @staticmethod
-    def _calculate_to_do_width(
-        to_do: Optional[ToDoData],
-        is_true: bool,
-        to_do_font: skia.Font,
-        detail_font: skia.Font,
-    ) -> Tuple[float, float]:
-        # If to_do is None, return 0 width
-        if to_do is None:
-            return 0.0, 0.0
-
-        # Else, calculate the width of the to-do text
+    def _calculate_to_do_width(to_do: ToDoData, is_true: bool) -> Tuple[float, float]:
+        # Calculate the width of the to-do text and its detail
         detail_text = to_do.detail_true if is_true else to_do.detail_false
         to_do_text = to_do.to_do
         if (
@@ -63,10 +74,51 @@ class FortuneModel:
             to_do_text = " " * 6 + to_do_text
 
         # Get text bounds in Skia
-        to_do_bounds = to_do_font.measureText(to_do_text)
-        detail_bounds = detail_font.measureText(detail_text)
+        return to_do_font.measureText(to_do_text), detail_font.measureText(detail_text)
 
-        return to_do_bounds, detail_bounds
+    def _draw_to_do(
+        self,
+        fortune: str,
+        to_do: Optional[ToDoData],
+        is_true: bool,
+        center_x: float,
+        begin_pos_y: float,
+    ) -> None:
+        # Nothing to draw in this cell
+        if to_do is None:
+            return
+
+        # "宜" is drawn in red on the left, "忌" in black on the right. For the
+        # extreme fortunes the whole cell reads "诸事不宜" or "诸事皆宜" instead.
+        if is_true:
+            is_extreme = fortune in too_unlucky
+            label = "诸事不宜" if is_extreme else "宜:"
+            detail = to_do.detail_true
+            paint = self.red_paint
+        else:
+            is_extreme = fortune in too_lucky
+            label = "诸事皆宜" if is_extreme else "忌:"
+            detail = to_do.detail_false
+            paint = self.black_paint
+
+        to_do_w, detail_w = self._calculate_to_do_width(to_do, is_true)
+        x = center_x - to_do_w / 2
+
+        # Draw the label and the detail text
+        self.canvas.drawString(label, x, begin_pos_y, to_do_font_bold, paint)
+        self.canvas.drawString(
+            detail,
+            center_x - detail_w / 2,
+            begin_pos_y + 40,
+            detail_font,
+            self.gray_paint,
+        )
+
+        # Draw the to-do itself right after the label
+        if not is_extreme:
+            self.canvas.drawString(
+                " " * 6 + to_do.to_do, x, begin_pos_y, to_do_font, paint
+            )
 
     def _draw_one_to_do_and_not_to_do(
         self,
@@ -74,73 +126,9 @@ class FortuneModel:
         to_do: Optional[ToDoData],
         not_to_do: Optional[ToDoData],
         begin_pos_y: float,
-        to_do_font: skia.Font,
-        to_do_font_bold: skia.Font,
-        detail_font: skia.Font,
-    ):
-        # Calculate text width for to_do and not_to_do
-        ttd_w, ttd_det_w = FortuneModel._calculate_to_do_width(
-            to_do, True, to_do_font, detail_font
-        )
-        tntd_w, tntd_det_w = FortuneModel._calculate_to_do_width(
-            not_to_do, False, to_do_font, detail_font
-        )
-
-        if to_do is not None:
-            # Draw "诸事不宜" or "宜:"
-            self.canvas.drawString(
-                "诸事不宜" if fortune in too_unlucky else "宜:",
-                bg_size[0] / 4 - ttd_w / 2,
-                begin_pos_y,
-                to_do_font_bold,
-                self.red_paint,
-            )
-
-            # Draw detail text
-            self.canvas.drawString(
-                to_do.detail_true,
-                bg_size[0] / 4 - ttd_det_w / 2,
-                begin_pos_y + 40,
-                detail_font,
-                self.gray_paint,
-            )
-
-            if fortune not in too_unlucky:
-                self.canvas.drawString(
-                    " " * 6 + to_do.to_do,
-                    bg_size[0] / 4 - ttd_w / 2,
-                    begin_pos_y,
-                    to_do_font,
-                    self.red_paint,
-                )
-
-        if not_to_do is not None:
-            # Draw "诸事皆宜" or "忌:"
-            self.canvas.drawString(
-                "诸事皆宜" if fortune in too_lucky else "忌:",
-                bg_size[0] / 4 * 3 - tntd_w / 2,
-                begin_pos_y,
-                to_do_font_bold,
-                self.black_paint,
-            )
-
-            # Draw detail text
-            self.canvas.drawString(
-                not_to_do.detail_false,
-                bg_size[0] / 4 * 3 - tntd_det_w / 2,
-                begin_pos_y + 40,
-                detail_font,
-                self.gray_paint,
-            )
-
-            if fortune not in too_lucky:
-                self.canvas.drawString(
-                    " " * 6 + not_to_do.to_do,
-                    bg_size[0] / 4 * 3 - tntd_w / 2,
-                    begin_pos_y,
-                    to_do_font,
-                    self.black_paint,
-                )
+    ) -> None:
+        self._draw_to_do(fortune, to_do, True, bg_size[0] / 4, begin_pos_y)
+        self._draw_to_do(fortune, not_to_do, False, bg_size[0] / 4 * 3, begin_pos_y)
 
     def _draw_title_for_fortune(self, fortune: str):
         # Prepare text for the title
@@ -171,9 +159,6 @@ class FortuneModel:
 
     @staticmethod
     def _split_text_by_emoji(text: str) -> List[Tuple[Literal["text", "emoji"], str]]:
-        # Find all emojis in the text
-        emoji_pattern = re.compile(emoji_format, flags=re.UNICODE)
-
         parts: List[Tuple[Literal["text", "emoji"], str]] = []
         last_end = 0
 
@@ -191,30 +176,29 @@ class FortuneModel:
         return parts
 
     @staticmethod
+    def _iter_font_runs(
+        text: str,
+        primary_font: skia.Font,
+        emoji_font: skia.Font,
+    ) -> Iterator[Tuple[str, skia.Font]]:
+        # Emojis are rendered with the emoji font, everything else with the primary font
+        for part_type, content in FortuneModel._split_text_by_emoji(text):
+            if content:
+                yield content, emoji_font if part_type == "emoji" else primary_font
+
+    @staticmethod
     def _get_emoji_text_width(
         text: str,
         primary_font: skia.Font,
         emoji_font: skia.Font,
     ) -> float:
         # Calculate the width of mixed text with emojis
-        total_width = 0
-        parts = FortuneModel._split_text_by_emoji(text)
-
-        # Iterate through each part of the text
-        for part_type, content in parts:
-            # Skip empty content
-            if not content:
-                continue
-
-            # If part is emoji, use emoji font; otherwise, use primary font
-            if part_type == "emoji":
-                total_width += emoji_font.measureText(content)
-            elif part_type == "text":
-                total_width += primary_font.measureText(content)
-            else:
-                raise ValueError(f"Unknown part type: {part_type}")
-
-        return total_width
+        return sum(
+            font.measureText(content)
+            for content, font in FortuneModel._iter_font_runs(
+                text, primary_font, emoji_font
+            )
+        )
 
     def _draw_emoji_text(
         self,
@@ -223,37 +207,11 @@ class FortuneModel:
         primary_font: skia.Font,
         emoji_font: skia.Font,
     ) -> None:
-        # Parse the location of the text
+        # Draw each run with its own font, advancing x by the run's width
         x, y = xy
-
-        # Split the text into parts (text and emojis)
-        parts = FortuneModel._split_text_by_emoji(text)
-        for part_type, content in parts:
-            # Skip empty content
-            if not content:
-                continue
-
-            # If part is emoji, draw it with the emoji font; otherwise, draw text with the primary font
-            if part_type == "emoji":
-                self.canvas.drawString(
-                    content,
-                    x,
-                    y,
-                    emoji_font,
-                    self.black_paint,
-                )
-                x += emoji_font.measureText(content)
-            elif part_type == "text":
-                self.canvas.drawString(
-                    content,
-                    x,
-                    y,
-                    primary_font,
-                    self.black_paint,
-                )
-                x += primary_font.measureText(content)
-            else:
-                raise ValueError(f"Unknown part type: {part_type}")
+        for content, font in self._iter_font_runs(text, primary_font, emoji_font):
+            self.canvas.drawString(content, x, y, font, self.black_paint)
+            x += font.measureText(content)
 
     def generate_fortune(self) -> skia.Image:
         # Generate a random fortune
@@ -269,18 +227,12 @@ class FortuneModel:
             to_do_and_not_to_do[0],
             to_do_and_not_to_do[2],
             275.0 + to_do_size + detail_size,
-            to_do_font,
-            to_do_font_bold,
-            detail_font,
         )
         self._draw_one_to_do_and_not_to_do(
             fortune,
             to_do_and_not_to_do[1],
             to_do_and_not_to_do[3],
             375.0 + to_do_size + detail_size,
-            to_do_font,
-            to_do_font_bold,
-            detail_font,
         )
 
         # Return the Skia image
