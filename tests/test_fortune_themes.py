@@ -111,3 +111,38 @@ def test_phigros_uses_bundled_fonts_with_chinese_and_emoji_fallback(display):
     # Rendering at a different size must not mutate already constructed runs.
     _font_runs(model, "ABC运势", 18, display)
     assert all(font.getSize() == 32 for _, font in runs)
+
+
+def test_phigros_chinese_glyphs_use_phi_file_not_noto():
+    from pathlib import Path
+
+    from shuiyuan_auto_reply.constants import settings
+    from shuiyuan_auto_reply.fortune.constants import to_do_typeface
+    from shuiyuan_auto_reply.fortune.phigros import _font_runs, _load_typeface
+
+    phi = _load_typeface(
+        str(Path(settings.assets_directory) / "themes/phigros/phi.ttf")
+    )
+    model = FortuneModel("测试", "phigros")
+    for display in (False, True):
+        for _, font in _font_runs(model, "今日运势宜忌学习大吉", 32, display):
+            assert font.getTypeface().uniqueID() == phi.uniqueID()
+            assert font.getTypeface().uniqueID() != to_do_typeface.uniqueID()
+
+
+def test_phigros_header_stays_inside_shared_slanted_outline():
+    from shuiyuan_auto_reply.fortune.phigros import _panel, _panel_path
+
+    surface = skia.Surface(180, 140)
+    surface.getCanvas().clear(skia.ColorTRANSPARENT)
+    _panel(surface.getCanvas(), 10, 10, 150, 100, header_color=skia.ColorCYAN)
+    pixels = surface.makeImageSnapshot().toarray()
+    path = _panel_path(10, 10, 150, 100)
+    for y in range(10, 110):
+        left = 10 + (110 - y) * 0.3
+        right = 160 - (y - 10) * 0.3
+        # Both the title stripe and body follow the same edge; avoid AA pixels.
+        assert pixels[y, int(left) - 2, 3] == 0
+        assert pixels[y, int(right) + 2, 3] == 0
+        assert pixels[y, int(left) + 3, 3] > 0
+        assert path.contains(left + 3, y + 0.5)

@@ -27,6 +27,20 @@ PANEL = 0xD9041428
 SLOPE = 0.3
 
 
+def _panel_path(x: float, y: float, width: float, height: float) -> skia.Path:
+    """Use the plugin's 0.3 slope without independently capping the cut."""
+    cut = height * SLOPE
+    if width <= cut:
+        raise ValueError("Panel width must exceed its slanted inset")
+    path = skia.Path()
+    path.moveTo(x + cut, y)
+    path.lineTo(x + width, y)
+    path.lineTo(x + width - cut, y + height)
+    path.lineTo(x, y + height)
+    path.close()
+    return path
+
+
 def _panel(
     canvas: skia.Canvas,
     x: float,
@@ -34,15 +48,21 @@ def _panel(
     width: float,
     height: float,
     color: int = PANEL,
+    header_color: int | None = None,
+    header_height: float = 54,
 ) -> None:
-    cut = min(height * SLOPE, 46)
-    path = skia.Path()
-    path.moveTo(x + cut, y)
-    path.lineTo(x + width, y)
-    path.lineTo(x + width - cut, y + height)
-    path.lineTo(x, y + height)
-    path.close()
+    path = _panel_path(x, y, width, height)
     canvas.drawPath(path, skia.Paint(Color=color, AntiAlias=True))
+    if header_color is not None:
+        canvas.save()
+        try:
+            canvas.clipPath(path, doAntiAlias=True)
+            canvas.drawRect(
+                skia.Rect.MakeXYWH(x, y, width, header_height),
+                skia.Paint(Color=header_color),
+            )
+        finally:
+            canvas.restore()
 
 
 @lru_cache(maxsize=4)
@@ -131,28 +151,36 @@ def draw_phigros(
     )
     canvas.drawImageRect(background, skia.Rect.MakeWH(1200, 760))
     canvas.drawRect(skia.Rect.MakeWH(1200, 760), skia.Paint(Color=0xB0081423))
+    # Four parallel tracks share the same slope as every card.
     for index, color in enumerate((0xFF92D050, CYAN, 0xFFFF0000, 0xFF6E6E6E)):
-        _panel(canvas, 42 + index * 16, 53, 13, 654, color)
-    _panel(canvas, 137, 45, 1015, 80)
-    _text(model, model.username + "的运势", 171, 97, 32, 650)
-    _text(model, "PHIGROS", 945, 95, 23, 170, CYAN, True)
-    _panel(canvas, 137, 145, 1015, 195)
-    _panel(canvas, 137, 145, 1015, 5, CYAN)
-    _text(model, "TODAY / 今日运势", 179, 187, 21, 350, MUTED, True)
-    _text(model, fortune, 185, 299, 92, 530, GOLD if fortune in lucky else PINK, True)
-    _text(model, "DAILY FORTUNE", 819, 241, 21, 270, MUTED, True)
-    _text(model, "把握当下 · 自由选择", 810, 283, 22, 290)
+        _panel(canvas, 8 + index * 10, 54, 206, 640, color)
+    _panel(canvas, 232, 46, 918, 76)
+    _text(model, model.username + "的运势", 273, 96, 30, 620)
+    _text(model, "PHIGROS", 969, 94, 21, 145, CYAN, True)
+    _panel(canvas, 201, 146, 918, 182, header_color=CYAN, header_height=3)
+    _text(model, "TODAY / 今日运势", 273, 188, 20, 350, MUTED, True)
+    _text(model, fortune, 253, 294, 82, 430, GOLD if fortune in lucky else PINK, True)
+    _text(model, "DAILY FORTUNE", 785, 228, 22, 270, MUTED, True)
+    _text(model, "把握当下 · 自由选择", 778, 267, 22, 270)
     for side, heading, accent in ((0, "宜 / GOOD", CYAN), (1, "忌 / AVOID", PINK)):
-        x = 137 + side * 520
-        _panel(canvas, x, 360, 495, 310)
-        _panel(canvas, x, 360, 495, 49, 0xB000B0F0 if side == 0 else 0x994D375D)
-        _text(model, heading, x + 35, 394, 25, 395, TEXT, True)
+        x = 138 + side * 469
+        _panel(
+            canvas,
+            x,
+            354,
+            449,
+            316,
+            header_color=0xE014617A if side == 0 else 0xE04F3B55,
+        )
+        _text(model, heading, x + 105, 391, 25, 300, TEXT, True)
         for row in range(2):
             activity = activities[side * 2 + row]
             if activity is None:
                 continue
-            y = 459 + row * 116
-            _text(model, activity.to_do, x + 35, y, 29, 389, accent)
+            y = 456 + row * 112
+            # Follow the common left edge while keeping all glyphs inside the card.
+            text_x = x + (670 - (y - 30)) * SLOPE + 23
+            _text(model, activity.to_do, text_x, y, 28, 305, accent)
             detail = activity.detail_true if side == 0 else activity.detail_false
-            _text(model, detail, x + 35, y + 40, 22, 389, MUTED)
-    _text(model, "SHUIYUAN  /  仅供娱乐参考", 171, 716, 19, 640, MUTED)
+            _text(model, detail, text_x - 12, y + 40, 21, 305, MUTED)
+    _text(model, "SHUIYUAN  /  仅供娱乐参考", 153, 715, 18, 640, MUTED)
