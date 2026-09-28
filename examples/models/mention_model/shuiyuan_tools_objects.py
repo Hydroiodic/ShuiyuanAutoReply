@@ -6,7 +6,7 @@ from typing import Optional
 
 from shuiyuan_auto_reply.shuiyuan.constants import base_url
 from shuiyuan_auto_reply.shuiyuan.objects import PostDetails, User
-from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
+from shuiyuan_auto_reply.shuiyuan.reply_utils import remove_shuiyuan_signature
 
 
 class UserShort:
@@ -73,7 +73,7 @@ class PostShort:
             f"PostMeta: id={self.id}, post_number={self.post_number}, topic_id={self.topic_id}\n"
             f"FromUser: {UserShort(User(id=self.user_id, username=self.username, name=self.name))}"
             f"TopicTitle: {self.title}\n"
-            f"Content: {ShuiyuanModel.remove_shuiyuan_signature(self.raw) if self.raw else self.cooked}\n"
+            f"Content: {remove_shuiyuan_signature(self.raw) if self.raw else self.cooked}\n"
         )
 
     def __repr__(self):

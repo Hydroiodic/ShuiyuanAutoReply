@@ -7,7 +7,9 @@ from typing import List, Optional
 from langchain_core.embeddings import Embeddings
 from sqlalchemy import Column, DateTime, Integer, String, Text, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
+
+from .utils import env_flag, to_psycopg_url, to_sqlalchemy_async_url
 
 MemoryPostgresBase = declarative_base()
 
@@ -36,29 +38,6 @@ class MentionMemoryKey(MemoryPostgresBase):
         )
 
 
-def _env_flag(*names: str) -> bool:
-    return any(
-        os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
-        for name in names
-    )
-
-
-def _to_sqlalchemy_async_url(conn_string: str) -> str:
-    if conn_string.startswith("postgresql+psycopg://"):
-        return conn_string
-    if conn_string.startswith("postgresql://"):
-        return "postgresql+psycopg://" + conn_string.removeprefix("postgresql://")
-    if conn_string.startswith("postgres://"):
-        return "postgresql+psycopg://" + conn_string.removeprefix("postgres://")
-    return conn_string
-
-
-def _to_psycopg_url(conn_string: str) -> str:
-    if conn_string.startswith("postgresql+psycopg://"):
-        return "postgresql://" + conn_string.removeprefix("postgresql+psycopg://")
-    return conn_string
-
-
 class AsyncPostgresMemoryDatabaseManager:
     """Postgres manager for LangMem/LangGraph store and memory metadata."""
 
@@ -68,7 +47,7 @@ class AsyncPostgresMemoryDatabaseManager:
             raise ValueError("Please set POSTGRES_MEMORY_DB_URL or POSTGRES_DB_URL.")
 
         self.engine = create_async_engine(
-            _to_sqlalchemy_async_url(self.conn_string),
+            to_sqlalchemy_async_url(self.conn_string),
             echo=False,
             pool_pre_ping=True,
         )
@@ -84,7 +63,7 @@ class AsyncPostgresMemoryDatabaseManager:
 
     @staticmethod
     def _strict_from_env() -> bool:
-        return _env_flag("POSTGRES_MEMORY_STRICT", "POSTGRES_STRICT")
+        return env_flag("POSTGRES_MEMORY_STRICT", "POSTGRES_STRICT")
 
     async def initialize_schema(self) -> None:
         """Initialize memory metadata tables and the pgvector extension."""
@@ -103,7 +82,7 @@ class AsyncPostgresMemoryDatabaseManager:
         from langgraph.store.postgres.aio import AsyncPostgresStore
 
         return AsyncPostgresStore.from_conn_string(
-            _to_psycopg_url(self.conn_string),
+            to_psycopg_url(self.conn_string),
             index={
                 "dims": dims,
                 "embed": embedding,

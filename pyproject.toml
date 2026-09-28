@@ -6,34 +6,39 @@ build-backend = "setuptools.build_meta"
 name = "shuiyuan-auto-reply"
 version = "0.1.0"
 description = "A project for automatic replies using LangChain and OpenRouter."
+readme = "README.md"
 authors = [{ name = "Hydroiodic_Acid", email = "liao_chengfan@sjtu.edu.cn" }]
 requires-python = ">=3.12"
 dependencies = [
     "aiohttp",
     "apscheduler",
     "dacite",
-    "ddgs",
     "httpx[socks]",
     "langchain-community",
+    "langchain-core",
     "langchain-openai",
     "langchain-mcp-adapters",
     "langgraph",
     "langgraph-checkpoint-postgres",
-    "langmem",
     "neomodel",
     "numpy",
     "openai",
     "pandas",
     "pillow",
+    "pydantic",
     "python-dotenv",
     "sentence-transformers",
     "skia-python",
-    "sqlalchemy",
+    "sqlalchemy[asyncio]",
+    "yarl",
 ]
 
 [project.optional-dependencies]
-dev = ["black", "isort"]
+dev = ["aiosqlite", "black", "build", "isort", "pre-commit", "pytest", "ruff"]
 server = ["fastapi[all]"]
+
+[project.urls]
+Repository = "https://github.com/Hydroiodic/ShuiyuanAutoReply"
 
 [tool.setuptools]
 include-package-data = true
@@ -56,5 +61,21 @@ shuiyuan_auto_reply = [
     "assets/fonts/Noto_Sans_SC/static/NotoSansSC-Regular.ttf",
 ]
 
+[tool.black]
+target-version = ["py312"]
+
 [tool.isort]
 profile = "black"
+combine_as_imports = true
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+# Formatting (including line length) is handled by black and isort
+select = ["E", "F", "W", "B"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

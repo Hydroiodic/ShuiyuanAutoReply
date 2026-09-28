@@ -4,7 +4,7 @@ import random
 import traceback
 from typing import List, Type
 
-from .tarot_group_data import *
+from .tarot_group_data import BaseTarotGroup, TarotCard, TarotResult, tarot_groups
 from .tarot_group_model import TarotGroupModel
 
 
@@ -42,19 +42,13 @@ class TarotModel:
             )
 
         # Randomly select cards and determine if they are reversed
-        selected_cards = random.sample(self.tarot_data, count)
-        results = []
-        for card in selected_cards:
-            is_reversed = random.choice([True, False])
-            results.append(
-                TarotResult(
-                    card=card,
-                    is_reversed=is_reversed,
-                    index=self.tarot_data.index(card) + 1,
-                )
+        selected = random.sample(list(enumerate(self.tarot_data, start=1)), count)
+        return [
+            TarotResult(
+                card=card, is_reversed=random.choice([True, False]), index=index
             )
-
-        return results
+            for index, card in selected
+        ]
 
     async def choose_tarot_group(self, question: str) -> BaseTarotGroup:
         """
@@ -82,14 +76,14 @@ class TarotModel:
 
         # First let's check if the question contains the name of any tarot group
         for group_class in tarot_groups:
-            if group_class().group_name in question:
+            if group_class.group_name in question:
                 return group_class
 
-        # Then let's get response from qwen to help us choose a group
+        # Then let's ask the LLM to help us choose a group
         try:
             preliminary_result = await self.tarot_group_model.get_response(question)
             for group_class in tarot_groups:
-                if group_class().group_name in preliminary_result:
+                if group_class.group_name in (preliminary_result or ""):
                     return group_class
         except Exception:
             logging.error(
@@ -98,9 +92,10 @@ class TarotModel:
             )
 
         # OK, let's calculate the match score for each group
-        scores = {}
-        for group_class in tarot_groups:
-            scores[group_class] = group_class.match_score(question)
+        scores = {
+            group_class: group_class.match_score(question)
+            for group_class in tarot_groups
+        }
 
         max_score = max(scores.values())
         return random.choice([k for k, v in scores.items() if v == max_score])

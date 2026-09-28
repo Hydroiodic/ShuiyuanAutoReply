@@ -2,6 +2,7 @@ import os
 from typing import Dict, Optional
 
 import httpx
+from openai import AsyncOpenAI
 
 
 def _normalize_socks_proxy_url(value: str) -> str:
@@ -29,9 +30,9 @@ def normalize_socks_proxy_env() -> None:
             os.environ[name] = _normalize_socks_proxy_url(value)
 
 
+# httpx reads the proxy variables when a client is created, so normalizing
+# them at import time covers every client built by this package
 normalize_socks_proxy_env()
-
-from openai import AsyncOpenAI
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_OPENROUTER_MODEL = "google/gemini-3.5-flash-lite"

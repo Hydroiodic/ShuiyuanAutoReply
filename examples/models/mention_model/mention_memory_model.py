@@ -15,13 +15,7 @@ from shuiyuan_auto_reply.database.postgres_memory_mgr import (
     AsyncPostgresMemoryDatabaseManager,
     create_global_async_postgres_memory_manager,
 )
-
-
-def _env_flag(name: str, default: bool = False) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+from shuiyuan_auto_reply.database.utils import env_flag
 
 
 class SearchMentionMemoryInput(BaseModel):
@@ -94,9 +88,7 @@ class MentionMemoryModel:
 
         self.search_limit = int(os.getenv("LANGMEM_SEARCH_LIMIT", "5"))
         self.max_context_chars = int(os.getenv("LANGMEM_CONTEXT_MAX_CHARS", "1600"))
-        self.strict = _env_flag("POSTGRES_MEMORY_STRICT", False) or _env_flag(
-            "POSTGRES_STRICT", False
-        )
+        self.strict = env_flag("POSTGRES_MEMORY_STRICT", "POSTGRES_STRICT")
 
         self.embedding_dims = settings.embedding_dims
         self.memory_config_key = "mention_memory_key"

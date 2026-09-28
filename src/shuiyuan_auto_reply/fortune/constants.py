@@ -1,4 +1,5 @@
 import os
+import re
 from dataclasses import dataclass
 from typing import List
 
@@ -107,3 +108,4 @@ emoji_format = (
     "\U0001f170-\U0001f251"  # Enclosed Alphanumeric Supplement
     "]+"
 )
+emoji_pattern = re.compile(emoji_format)

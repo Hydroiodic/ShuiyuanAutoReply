@@ -6,16 +6,13 @@ import aiohttp
 import pandas as pd
 from dacite import from_dict
 
-from .objects import *
+from .objects import StockData
 
 
 class AShareModel:
     """
     A model for managing Sina stock data.
     """
-
-    def __init__(self):
-        pass
 
     # Sina API for daily, weekly, monthly, and minute data
     @staticmethod
@@ -35,11 +32,12 @@ class AShareModel:
         ts = int(frequency[:-1]) if frequency[:-1].isdigit() else 1
 
         # Adjust count based on end_date for certain frequencies
-        if (
-            end_date is not None
-            and end_date != ""
-            and frequency in ["240m", "1200m", "7200m"]
-        ):
+        use_end_date = end_date not in (None, "") and frequency in (
+            "240m",
+            "1200m",
+            "7200m",
+        )
+        if use_end_date:
             # Always normalize to a Timestamp: a plain datetime.date cannot be
             # subtracted from datetime.now() below
             end_date = pd.to_datetime(end_date)
@@ -56,8 +54,9 @@ class AShareModel:
 
         # Let's try to fetch the data
         async with aiohttp.ClientSession() as session:
-            # Let's parse the data we get from Sina
-            dstr = json.loads(await (await session.get(sina_price_url)).content.read())
+            async with session.get(sina_price_url) as response:
+                # Let's parse the data we get from Sina
+                dstr = json.loads(await response.read())
             df = pd.DataFrame(
                 dstr, columns=["day", "open", "high", "low", "close", "volume"]
             )
@@ -73,11 +72,7 @@ class AShareModel:
             df.index.name = "time"
 
             # For daily, weekly, monthly data, return the last 'mcount' rows
-            if (
-                end_date is not None
-                and end_date != ""
-                and frequency in ["240m", "1200m", "7200m"]
-            ):
+            if use_end_date:
                 return df[df.index <= end_date][:mcount]
 
             # For minute-level data, return the data as is
@@ -109,8 +104,9 @@ class AShareModel:
 
         # Let's try to fetch the data
         async with aiohttp.ClientSession() as session:
-            # Let's parse the data we get from Tencent
-            st = json.loads(await (await session.get(tencent_price_url)).content.read())
+            async with session.get(tencent_price_url) as response:
+                # Let's parse the data we get from Tencent
+                st = json.loads(await response.read())
             buf = st["data"][code]["m" + str(ts)]
 
             # Only these columns are needed
@@ -141,11 +137,10 @@ class AShareModel:
         frequency: Literal["1m", "5m", "15m", "30m", "60m", "1d", "1w", "1M"] = "1d",
     ) -> pd.DataFrame:
         # For compatibility with other interfaces, convert code to xcode
-        xcode = code.replace(".XSHG", "").replace(".XSHE", "")
+        xcode = code
         if "XSHG" in code or "XSHE" in code:
-            xcode = ("sh" if "XSHG" in code else "sz") + xcode
-        else:
-            xcode = code
+            prefix = "sh" if "XSHG" in code else "sz"
+            xcode = prefix + code.replace(".XSHG", "").replace(".XSHE", "")
 
         # For daily, weekly, and monthly data, use Sina API
         if frequency in ["1d", "1w", "1M"]:
@@ -157,13 +152,7 @@ class AShareModel:
             )
 
         # For minute-level data, use Tencent API primarily, with Sina as a fallback
-        if frequency in [
-            "1m",
-            "5m",
-            "15m",
-            "30m",
-            "60m",
-        ]:
+        if frequency in ["1m", "5m", "15m", "30m", "60m"]:
             # Only tencent supports 1-minute data
             if frequency == "1m":
                 return await AShareModel._get_price_min_tx(

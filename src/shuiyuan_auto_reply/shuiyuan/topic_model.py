@@ -2,15 +2,16 @@ import asyncio
 import logging
 import traceback
 from abc import ABC, abstractmethod
+from typing import List
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from .background import BackgroundTaskMixin
 from .objects import TimeInADay
-from .reply_utils import generate_random_string, make_unique_reply
 from .shuiyuan_model import ShuiyuanModel
 
 
-class BaseTopicModel(ABC):
+class BaseTopicModel(BackgroundTaskMixin, ABC):
     """
     A class to represent a topic model.
     """
@@ -22,22 +23,11 @@ class BaseTopicModel(ABC):
         :param model: An instance of ShuiyuanModel.
         :param topic_id: The ID of the topic to be managed.
         """
+        super().__init__()
         self.model = model
         self.topic_id = topic_id
-        self.stream_list = []
+        self.stream_list: List[int] = []
         self.scheduler = AsyncIOScheduler()
-        self._bg_tasks = set()
-
-    # Shared helpers, kept as static methods for backward compatibility
-    _generate_random_string = staticmethod(generate_random_string)
-    _make_unique_reply = staticmethod(make_unique_reply)
-
-    def _on_bg_task_done(self, task: "asyncio.Task") -> None:
-        self._bg_tasks.discard(task)
-        if not task.cancelled() and task.exception() is not None:
-            logging.error(
-                "Background post routine failed", exc_info=task.exception()
-            )
 
     @abstractmethod
     async def _new_post_routine(self, post_id: int) -> None:
@@ -48,7 +38,6 @@ class BaseTopicModel(ABC):
         :param post_id: The ID of the new post.
         :return: None
         """
-        pass
 
     @abstractmethod
     async def _daily_routine(self) -> None:
@@ -58,7 +47,6 @@ class BaseTopicModel(ABC):
 
         :return: None
         """
-        pass
 
     async def watch_new_post_routine(self) -> None:
         """
@@ -82,27 +70,23 @@ class BaseTopicModel(ABC):
             new_stream = topic_details.post_stream.stream
 
             # Try to find the last element in the previous stream, which is still in the new stream
-            last_stream = None
-            for post_id in reversed(self.stream_list):
-                if post_id in new_stream:
-                    last_stream = post_id
-                    break
+            new_stream_ids = set(new_stream)
+            last_stream = next(
+                (
+                    post_id
+                    for post_id in reversed(self.stream_list)
+                    if post_id in new_stream_ids
+                ),
+                None,
+            )
 
-            # If we found the last known post, we can slice the new stream
+            # If we found the last known post, every post after it is new.
+            # Start each routine as a background task so the watcher loop
+            # doesn't block waiting for them to finish.
             if last_stream is not None:
-                # Slice the new stream from the last known post
                 start_index = new_stream.index(last_stream) + 1
-                new_posts = new_stream[start_index:]
-
-                # OK, we have found the new posts — start each routine as a
-                # background task so the watcher loop doesn't block waiting
-                # for them to finish.
-                for post_id in new_posts:
-                    task = asyncio.create_task(self._new_post_routine(post_id))
-                    # keep a reference so tasks aren't garbage-collected
-                    self._bg_tasks.add(task)
-                    # remove task from the set (and log any error) when done
-                    task.add_done_callback(self._on_bg_task_done)
+                for post_id in new_stream[start_index:]:
+                    self._spawn_background_task(self._new_post_routine(post_id))
 
             # Update the stream list with the new stream
             self.stream_list = new_stream

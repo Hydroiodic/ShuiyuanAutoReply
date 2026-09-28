@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-import re
 
 import dotenv
 import pandas as pd
@@ -16,8 +15,13 @@ logging.basicConfig(
 # Load all environment variables from the .env file
 dotenv.load_dotenv()
 
-from shuiyuan_auto_reply.constants import settings
-from shuiyuan_auto_reply.database.neo4j_mgr import create_global_async_neo4j_manager
+from shuiyuan_auto_reply.constants import settings  # noqa: E402
+from shuiyuan_auto_reply.database.neo4j_mgr import (  # noqa: E402
+    create_global_async_neo4j_manager,
+)
+from shuiyuan_auto_reply.shuiyuan.reply_utils import (  # noqa: E402
+    remove_shuiyuan_signature,
+)
 
 
 async def init_database():
@@ -30,9 +34,6 @@ async def init_database():
         # Initialize the Neo4j database
         await neo4j_manager.initialize()
 
-        # The signature has to be removed before storing the sentences
-        sig_re = r"<div data-signature>.*?</div>"
-
         # Try to open the CSV file and import data
         file_path = os.path.join(os.path.dirname(__file__), "user_archive.csv")
         if os.path.exists(file_path):
@@ -41,7 +42,7 @@ async def init_database():
             df = pd.read_csv(file_path)
             # Some data should not be imported, filter them out
             data_to_import = []
-            for idx, raw in enumerate(df["post_raw"]):
+            for raw in df["post_raw"]:
                 # If NaN, skip
                 if pd.isna(raw):
                     continue
@@ -50,9 +51,7 @@ async def init_database():
                     continue
                 # For other posts, import them into the database
                 # But signature needs to be removed from the post
-                data_to_import.append(
-                    re.sub(sig_re, "", str(raw), flags=re.DOTALL).strip()
-                )
+                data_to_import.append(remove_shuiyuan_signature(str(raw)))
             # Make every record unique
             data_to_import = list(set(data_to_import))
             # Log the number of records to be imported
@@ -69,5 +68,4 @@ async def init_database():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     asyncio.run(init_database())

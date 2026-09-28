@@ -1,0 +1,164 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  format:
+    name: Format and lint
+    # Branches of this repository are handled by their push event. A pull
+    # request only needs its own run when it comes from a fork, and there the
+    # job can only check the formatting because it cannot push.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.head.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Install pre-commit
+        run: python -m pip install pre-commit
+
+      # The hooks exit non-zero whenever they fix a file, so ignore the exit
+      # code here and check the result again after committing the fixes.
+      - name: Run formatters
+        run: pre-commit run --all-files || true
+
+      - name: Commit formatting fixes
+        if: github.event_name == 'push' && github.ref_type == 'branch'
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "Nothing to format."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --all --message "style: auto-format code with pre-commit"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Check formatting and lint
+        run: pre-commit run --all-files --show-diff-on-failure
+
+      - name: Record the commit to build
+        id: head
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: Test
+    needs: format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.format.outputs.sha }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # sentence-transformers depends on PyTorch, whose default wheel ships
+      # several GB of CUDA libraries that the tests do not need
+      - name: Install CPU-only PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install the package
+        run: python -m pip install -e ".[dev]"
+
+      - name: Run tests
+        run: python -m pytest
+
+  build:
+    name: Build wheel
+    needs: format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.format.outputs.sha }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install build
+          python -m build
+
+      - name: Check the wheel ships the assets
+        shell: python
+        run: |
+          import glob
+          import zipfile
+
+          (wheel,) = glob.glob("dist/*.whl")
+          names = set(zipfile.ZipFile(wheel).namelist())
+          required = [
+              "shuiyuan_auto_reply/assets/tarot_data.json",
+              "shuiyuan_auto_reply/assets/tarot_img/1.jpg",
+              "shuiyuan_auto_reply/assets/tarot_img/78_rev.jpg",
+              "shuiyuan_auto_reply/assets/fonts/Noto_Color_Emoji/NotoColorEmoji-Regular.ttf",
+              "shuiyuan_auto_reply/assets/fonts/Noto_Sans_SC/static/NotoSansSC-Bold.ttf",
+              "shuiyuan_auto_reply/assets/fonts/Noto_Sans_SC/static/NotoSansSC-Regular.ttf",
+          ]
+          missing = [name for name in required if name not in names]
+          if missing:
+              raise SystemExit(f"{wheel} is missing {missing}")
+          print(f"{wheel} contains {len(names)} files")
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: shuiyuan-auto-reply-dist
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: shuiyuan-auto-reply-dist
+          path: dist/
+
+      - name: Create the release with the wheel attached
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "${GITHUB_REF_NAME}" dist/*
+          --repo "${GITHUB_REPOSITORY}"
+          --title "${GITHUB_REF_NAME}"
+          --generate-notes

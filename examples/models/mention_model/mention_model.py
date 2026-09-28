@@ -4,11 +4,15 @@ import re
 import traceback
 from typing import Dict, Optional
 
-from shuiyuan_auto_reply.constants import settings
-from shuiyuan_auto_reply.shuiyuan.objects import User, UserActionDetails
+from shuiyuan_auto_reply.shuiyuan.objects import PostDetails, User, UserActionDetails
+from shuiyuan_auto_reply.shuiyuan.reply_utils import (
+    make_unique_reply,
+    parse_prompt_text,
+)
 from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 from shuiyuan_auto_reply.shuiyuan.user_action_model import BaseUserActionModel
 
+from ..common import handle_post_and_reply
 from .mention_openrouter_model import MentionOpenRouterModel
 
 
@@ -32,26 +36,6 @@ class MentionModel(BaseUserActionModel):
         """
         super().__init__(model, username, [5, 7])
         self.mention_openrouter_model = MentionOpenRouterModel(model)
-        self.username = username
-
-    @staticmethod
-    def _parse_prompt_text(raw: str, prompt: str) -> Optional[str]:
-        """
-        Return text after the first occurrence of the prompt in raw.
-        And remove the prompt itself and Shuiyuan signature.
-
-        :param raw: The raw content of the post.
-        :param prompt: The prompt string to look for.
-        :return: The parsed text after the prompt or None if prompt not found.
-        """
-        # Get the text after the first occurrence of the prompt,
-        # keeping any later occurrences of the same keyword intact
-        first_occurrence = raw.find(prompt)
-        if first_occurrence == -1:
-            return None
-        raw = raw[first_occurrence + len(prompt) :]
-
-        return ShuiyuanModel.remove_shuiyuan_signature(raw).strip()
 
     async def _pumpkin_condition(
         self, topic_id: int, reply_to_post_number: Optional[int], raw: str, user: User
@@ -66,7 +50,7 @@ class MentionModel(BaseUserActionModel):
         :return: A string to reply to the post if the condition is met, otherwise None.
         """
         # If the raw content does not contain "【小南瓜】", we return None
-        raw = MentionModel._parse_prompt_text(raw, "【小南瓜】")
+        raw = parse_prompt_text(raw, "【小南瓜】")
         if raw is None:
             return None
 
@@ -77,7 +61,7 @@ class MentionModel(BaseUserActionModel):
         if not reply:
             reply = "抱歉，南瓜bot暂时没能生成回复，请稍后再试"
         reply = f"{reply}\n\n（内容由AI生成，仅供参考）"
-        return MentionModel._make_unique_reply(reply)
+        return make_unique_reply(reply)
 
     async def _clear_condition(self, raw: str, topic_id: int) -> Optional[str]:
         """
@@ -94,7 +78,7 @@ class MentionModel(BaseUserActionModel):
         # Clear the session history for the user
         self.mention_openrouter_model.clear_session_history(topic_id)
 
-        return MentionModel._make_unique_reply("已清除当前话题中的对话历史记录")
+        return make_unique_reply("已清除当前话题中的对话历史记录")
 
     def _random_condition(self, raw: str) -> Optional[str]:
         """
@@ -110,7 +94,7 @@ class MentionModel(BaseUserActionModel):
         # Use regular expression to extract the parameters for the random number generation
         r = re.search(r"【投掷】\s*(\d*)d\s*(\d+)", raw, re.IGNORECASE)
         if r is None:
-            return MentionModel._make_unique_reply(
+            return make_unique_reply(
                 "请按照格式`【投掷】ndm`来投掷随机数，"
                 "例如`【投掷】3d6`表示投掷3个1到6之间的随机数\n"
             )
@@ -120,12 +104,12 @@ class MentionModel(BaseUserActionModel):
 
         # Check the validity of n and m
         if n <= 0 or m <= 0:
-            return MentionModel._make_unique_reply(
+            return make_unique_reply(
                 "n和m必须都是正整数，请检查你的输入\n"
                 "例如`【投掷】3d6`表示投掷3个1到6之间的随机数\n"
             )
         if n > 100:
-            return MentionModel._make_unique_reply(
+            return make_unique_reply(
                 "n太大了，请限制在100以内\n"
                 "例如`【投掷】3d6`表示投掷3个1到6之间的随机数\n"
             )
@@ -133,7 +117,7 @@ class MentionModel(BaseUserActionModel):
         # Generate n random numbers between 1 and m
         random_numbers = [random.randint(1, m) for _ in range(n)]
         random_numbers_str = ", ".join(str(num) for num in random_numbers)
-        return MentionModel._make_unique_reply(
+        return make_unique_reply(
             f"你投掷了 {n} 个 1 到 {m} 之间的随机数，结果是：\n"
             f"> {random_numbers_str}\n"
         )
@@ -162,7 +146,7 @@ class MentionModel(BaseUserActionModel):
             else:
                 reply_to_post_number = int(r.group(1))
         elif reply_to_post_number is None:
-            return MentionModel._make_unique_reply(MentionModel._POLL_USAGE_HINT)
+            return make_unique_reply(MentionModel._POLL_USAGE_HINT)
 
         # Now let's get the post details
         try:
@@ -175,14 +159,14 @@ class MentionModel(BaseUserActionModel):
                 f"post_number {reply_to_post_number}, "
                 f"traceback is as follows:\n{traceback.format_exc()}"
             )
-            return MentionModel._make_unique_reply(
+            return make_unique_reply(
                 "无法获取被抽选的帖子详情，请检查你的输入是否正确，或者稍后再试\n"
                 + MentionModel._POLL_USAGE_HINT
             )
 
         # Check if the post contains a poll
         if post_details.polls is None:
-            return MentionModel._make_unique_reply(
+            return make_unique_reply(
                 "被抽选的帖子中不包含投票，无法进行抽选，请检查你的输入或者稍后再试\n"
                 + MentionModel._POLL_USAGE_HINT
             )
@@ -197,7 +181,7 @@ class MentionModel(BaseUserActionModel):
         ]
         visible_poll_ids = {poll.id for poll in visible_polls}
         if not visible_poll_ids:
-            return MentionModel._make_unique_reply(
+            return make_unique_reply(
                 "被抽选的帖子中的所有投票均不可见或类型不支持，"
                 "当前仅支持单选或多选且公开的投票，请检查你的输入或者稍后再试\n"
             )
@@ -255,7 +239,7 @@ class MentionModel(BaseUserActionModel):
                 reply_lines.append("")
 
         # Join all lines into a single reply text
-        return MentionModel._make_unique_reply("\n".join(reply_lines))
+        return make_unique_reply("\n".join(reply_lines))
 
     def _help_condition(self, raw: str) -> Optional[str]:
         """
@@ -268,7 +252,7 @@ class MentionModel(BaseUserActionModel):
         if "【帮助】" not in raw:
             return None
 
-        return MentionModel._make_unique_reply(
+        return make_unique_reply(
             "帮助信息如下：\n"
             "1. 输入【小南瓜】+对话，与南瓜 bot 聊天 :jack_o_lantern:\n"
             "2. 输入【清除历史】，清除当前话题中的对话历史记录 :broom:\n"
@@ -285,100 +269,35 @@ class MentionModel(BaseUserActionModel):
         :param action: The details of the user action (mention).
         :return: None
         """
-        # This is the text to reply to the post
-        text: Optional[str] = None
+        await handle_post_and_reply(self.model, action.post_id, self._generate_reply)
 
-        try:
-            # First let's try to get the post details
-            post_details = await self.model.get_post_details(action.post_id)
-            post_user = User(
-                post_details.user_id,
-                post_details.username,
-                post_details.name,
-            )
+    async def _generate_reply(self, post: PostDetails, user: User) -> Optional[str]:
+        """
+        Build the reply for a post that mentions the robot account.
+        The first condition that is met wins.
 
-            # If the member "raw" is not present, we should skip it
-            if post_details.raw is None:
-                logging.warning(
-                    f"Post {action.post_id} does not have raw content, skipping."
-                )
-                return
+        :param post: The details of the post.
+        :param user: The user who posted the message.
+        :return: The text to reply with, or None if no condition is met.
+        """
+        raw = post.raw
 
-        except Exception:
-            logging.error(
-                f"Failed to get post details for {action.post_id}, "
-                f"traceback is as follows:\n{traceback.format_exc()}"
-            )
-            return
+        # Check if the mention actually exists (word boundary avoids
+        # matching usernames that merely share this one as a prefix)
+        if re.search(rf"@{re.escape(self.username)}\b", raw, re.IGNORECASE) is None:
+            return None
 
-        try:
-            # If the post is an auto-reply, we should skip it
-            if settings.auto_reply_tag in post_details.raw:
-                return
-
-            # Check if the mention actually exists (word boundary avoids
-            # matching usernames that merely share this one as a prefix)
-            r = re.search(
-                rf"@{re.escape(self.username)}\b", post_details.raw, re.IGNORECASE
-            )
-            if r is None:
-                return
-
-            # Check help condition
-            text = self._help_condition(post_details.raw)
-            if text is not None:
-                return
-
-            # Check clear condition
-            text = await self._clear_condition(post_details.raw, post_details.topic_id)
-            if text is not None:
-                return
-
-            # Check pumpkin condition
+        text = self._help_condition(raw)
+        if text is None:
+            text = await self._clear_condition(raw, post.topic_id)
+        if text is None:
             text = await self._pumpkin_condition(
-                post_details.topic_id,
-                post_details.reply_to_post_number,
-                post_details.raw,
-                post_user,
+                post.topic_id, post.reply_to_post_number, raw, user
             )
-            if text is not None:
-                return
-
-            # Check random condition
-            text = self._random_condition(post_details.raw)
-            if text is not None:
-                return
-
-            # Check poll condition
+        if text is None:
+            text = self._random_condition(raw)
+        if text is None:
             text = await self._poll_condition(
-                post_details.raw,
-                post_details.topic_id,
-                post_details.reply_to_post_number,
+                raw, post.topic_id, post.reply_to_post_number
             )
-            if text is not None:
-                return
-
-        except Exception:
-            # If we failed to get the post details or any other error occurred
-            logging.error(
-                f"Failed to process post {action.post_id}, "
-                f"traceback is as follows:\n{traceback.format_exc()}"
-            )
-            # We should reply to the post with an error message
-            text = MentionModel._make_unique_reply(
-                "抱歉，南瓜bot遇到了一个错误，暂时无法处理您的请求，请稍后再试"
-            )
-
-        finally:
-            if text is not None:
-                try:
-                    await self.model.reply_to_post(
-                        text,
-                        action.topic_id,
-                        action.post_number,
-                    )
-                except Exception:
-                    logging.error(
-                        f"Failed to reply to post {action.post_id}, "
-                        f"traceback is as follows:\n{traceback.format_exc()}"
-                    )
+        return text

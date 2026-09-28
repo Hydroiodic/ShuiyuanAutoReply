@@ -2,42 +2,33 @@ import asyncio
 import logging
 import traceback
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 
+from .background import BackgroundTaskMixin
 from .objects import UserActionDetails
-from .reply_utils import generate_random_string, make_unique_reply
 from .shuiyuan_model import ShuiyuanModel
 
 
-class BaseUserActionModel(ABC):
+class BaseUserActionModel(BackgroundTaskMixin, ABC):
     """
-    A class to represent a mention model.
+    A class to represent a user action model.
     """
 
     def __init__(self, model: ShuiyuanModel, username: str, action_type: List[int]):
         """
-        Initialize the MentionModel with a ShuiyuanModel instance.
+        Initialize the UserActionModel with a ShuiyuanModel instance.
 
         :param model: An instance of ShuiyuanModel.
         :param username: The username to be managed.
         :param action_type: The list of action types to monitor.
         """
+        super().__init__()
         self.model = model
         self.username = username
         self.action_type = action_type
-        self.stream_list = []
-        self._bg_tasks = set()
-
-    # Shared helpers, kept as static methods for backward compatibility
-    _generate_random_string = staticmethod(generate_random_string)
-    _make_unique_reply = staticmethod(make_unique_reply)
-
-    def _on_bg_task_done(self, task: "asyncio.Task") -> None:
-        self._bg_tasks.discard(task)
-        if not task.cancelled() and task.exception() is not None:
-            logging.error(
-                "Background action routine failed", exc_info=task.exception()
-            )
+        # None until the first successful poll, so that actions which already
+        # existed at startup are not replayed
+        self.stream_list: Optional[List[int]] = None
 
     @abstractmethod
     async def _new_action_routine(self, action: UserActionDetails) -> None:
@@ -48,14 +39,13 @@ class BaseUserActionModel(ABC):
         :param action: The details of the action notification.
         :return: None
         """
-        pass
 
     async def watch_new_action_routine(self) -> None:
         """
         A routine to watch for new actions.
         """
         while True:
-            # Get the mention details
+            # Get the action details
             try:
                 actions = await self.model.get_actions(self.username, self.action_type)
                 action_details = actions.user_actions
@@ -71,8 +61,10 @@ class BaseUserActionModel(ABC):
             # OK, let's difference the current stream with the new one
             new_stream = [detail.post_id for detail in action_details]
 
-            # If the stream list is empty, we should initialize it
-            if not self.stream_list:
+            # On the first poll we only record what already exists. Checking
+            # for None rather than an empty list means that the very first
+            # action of an account with no history is still handled.
+            if self.stream_list is None:
                 self.stream_list = new_stream
                 continue
 
@@ -80,19 +72,9 @@ class BaseUserActionModel(ABC):
             # the first known post_id would drop genuinely new actions listed
             # after an old one, and reprocess everything when no overlap exists.
             known_post_ids = set(self.stream_list)
-            new_actions = [
-                detail
-                for detail in action_details
-                if detail.post_id not in known_post_ids
-            ]
-
-            # OK, we have found the new posts, we should do some routine with them
-            for mention in new_actions:
-                task = asyncio.create_task(self._new_action_routine(mention))
-                # keep a reference so tasks aren't garbage-collected
-                self._bg_tasks.add(task)
-                # remove task from the set (and log any error) when done
-                task.add_done_callback(self._on_bg_task_done)
+            for detail in action_details:
+                if detail.post_id not in known_post_ids:
+                    self._spawn_background_task(self._new_action_routine(detail))
 
             # Update the stream list with the new stream
             self.stream_list = new_stream

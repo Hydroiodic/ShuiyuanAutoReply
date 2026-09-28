@@ -6,10 +6,11 @@ from typing import List, Optional
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, selectinload
+from sqlalchemy.orm import declarative_base, relationship, selectinload
 
 from shuiyuan_auto_reply.retry import async_retry
+
+from .utils import env_flag, to_sqlalchemy_async_url
 
 RecordPostgresBase = declarative_base()
 
@@ -74,21 +75,20 @@ class Alias(RecordPostgresBase):
         )
 
 
-def _env_flag(*names: str) -> bool:
-    return any(
-        os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
-        for name in names
-    )
+async def _find_user(session: AsyncSession, user_id: int) -> Optional[User]:
+    result = await session.execute(select(User).where(User.user_id == user_id))
+    return result.scalar_one_or_none()
 
 
-def _to_sqlalchemy_async_url(db_url: str) -> str:
-    if db_url.startswith("postgresql+psycopg://"):
-        return db_url
-    if db_url.startswith("postgresql://"):
-        return "postgresql+psycopg://" + db_url.removeprefix("postgresql://")
-    if db_url.startswith("postgres://"):
-        return "postgresql+psycopg://" + db_url.removeprefix("postgres://")
-    return db_url
+async def _find_or_create_user(session: AsyncSession, user_id: int) -> User:
+    """Return the user, adding (and flushing) a new one if it does not exist."""
+    user = await _find_user(session, user_id)
+    if user is None:
+        logging.warning("User with ID %s not found, creating a new one", user_id)
+        user = User(user_id=user_id)
+        session.add(user)
+        await session.flush()
+    return user
 
 
 class AsyncPostgresRecordDatabaseManager:
@@ -102,7 +102,7 @@ class AsyncPostgresRecordDatabaseManager:
             )
 
         self.engine = create_async_engine(
-            _to_sqlalchemy_async_url(self.db_url),
+            to_sqlalchemy_async_url(self.db_url),
             echo=False,
             pool_pre_ping=True,
         )
@@ -122,7 +122,7 @@ class AsyncPostgresRecordDatabaseManager:
 
     @staticmethod
     def _strict_from_env() -> bool:
-        return _env_flag("POSTGRES_RECORD_STRICT", "POSTGRES_STRICT")
+        return env_flag("POSTGRES_RECORD_STRICT", "POSTGRES_STRICT")
 
     async def create_tables(self) -> None:
         """Create all record tables."""
@@ -136,47 +136,13 @@ class AsyncPostgresRecordDatabaseManager:
             await conn.run_sync(RecordPostgresBase.metadata.drop_all)
         logging.info("Postgres record tables dropped successfully")
 
-    @async_retry(default=None)
-    async def add_user(self, user_id: int) -> Optional[User]:
-        """Add a new user."""
+    async def _get_or_add_user(self, user_id: int, warn_if_exists: bool) -> User:
         async with self.async_session() as session:
             try:
-                result = await session.execute(
-                    select(User).where(User.user_id == user_id)
-                )
-                existing_user = result.scalar_one_or_none()
-
-                if existing_user:
-                    logging.warning("User with ID %s already exists", user_id)
-                    return existing_user
-
-                user = User(user_id=user_id)
-                session.add(user)
-                await session.commit()
-                await session.refresh(user)
-                return user
-            except Exception:
-                await session.rollback()
-                raise
-
-    @async_retry(default=None)
-    async def get_user(self, user_id: int) -> Optional[User]:
-        """Get user by ID."""
-        async with self.async_session() as session:
-            result = await session.execute(select(User).where(User.user_id == user_id))
-            return result.scalar_one_or_none()
-
-    @async_retry(default=None)
-    async def get_or_add_user(self, user_id: int) -> Optional[User]:
-        """Get user by ID, create if it does not exist."""
-        async with self.async_session() as session:
-            try:
-                result = await session.execute(
-                    select(User).where(User.user_id == user_id)
-                )
-                user = result.scalar_one_or_none()
-
-                if user:
+                user = await _find_user(session, user_id)
+                if user is not None:
+                    if warn_if_exists:
+                        logging.warning("User with ID %s already exists", user_id)
                     return user
 
                 user = User(user_id=user_id)
@@ -187,6 +153,22 @@ class AsyncPostgresRecordDatabaseManager:
             except Exception:
                 await session.rollback()
                 raise
+
+    @async_retry(default=None)
+    async def add_user(self, user_id: int) -> Optional[User]:
+        """Add a new user, or return the existing one."""
+        return await self._get_or_add_user(user_id, warn_if_exists=True)
+
+    @async_retry(default=None)
+    async def get_user(self, user_id: int) -> Optional[User]:
+        """Get user by ID."""
+        async with self.async_session() as session:
+            return await _find_user(session, user_id)
+
+    @async_retry(default=None)
+    async def get_or_add_user(self, user_id: int) -> Optional[User]:
+        """Get user by ID, create if it does not exist."""
+        return await self._get_or_add_user(user_id, warn_if_exists=False)
 
     @async_retry(default=False)
     async def update_user(
@@ -199,11 +181,7 @@ class AsyncPostgresRecordDatabaseManager:
         """Update user information."""
         async with self.async_session() as session:
             try:
-                result = await session.execute(
-                    select(User).where(User.user_id == user_id)
-                )
-                user = result.scalar_one_or_none()
-
+                user = await _find_user(session, user_id)
                 if not user:
                     logging.warning("User with ID %s not found", user_id)
                     return False
@@ -226,11 +204,7 @@ class AsyncPostgresRecordDatabaseManager:
         """Delete a user and all associated records."""
         async with self.async_session() as session:
             try:
-                result = await session.execute(
-                    select(User).where(User.user_id == user_id)
-                )
-                user = result.scalar_one_or_none()
-
+                user = await _find_user(session, user_id)
                 if not user:
                     logging.warning("User with ID %s not found", user_id)
                     return False
@@ -256,19 +230,7 @@ class AsyncPostgresRecordDatabaseManager:
         """Add a record, creating the user if it does not exist."""
         async with self.async_session() as session:
             try:
-                result = await session.execute(
-                    select(User).where(User.user_id == user_id)
-                )
-                user = result.scalar_one_or_none()
-
-                if not user:
-                    logging.warning(
-                        "User with ID %s not found, creating a new one",
-                        user_id,
-                    )
-                    user = User(user_id=user_id)
-                    session.add(user)
-                    await session.flush()
+                user = await _find_or_create_user(session, user_id)
 
                 record = Record(record_str=record_str, user_id=user.user_id)
                 session.add(record)
@@ -354,19 +316,7 @@ class AsyncPostgresRecordDatabaseManager:
         """Add an alias, creating the user if it does not exist."""
         async with self.async_session() as session:
             try:
-                result = await session.execute(
-                    select(User).where(User.user_id == user_id)
-                )
-                user = result.scalar_one_or_none()
-
-                if not user:
-                    logging.warning(
-                        "User with ID %s not found, creating a new one",
-                        user_id,
-                    )
-                    user = User(user_id=user_id)
-                    session.add(user)
-                    await session.flush()
+                user = await _find_or_create_user(session, user_id)
 
                 alias = Alias(alias_str=alias_str, user_id=user.user_id)
                 session.add(alias)

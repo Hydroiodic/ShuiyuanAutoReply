@@ -9,7 +9,7 @@ import pickle
 import re
 import time
 import traceback
-from typing import ClassVar, Optional, Tuple
+from typing import ClassVar, Dict, List, Optional, Tuple
 from urllib.parse import urljoin
 
 import aiohttp
@@ -19,20 +19,43 @@ from yarl import URL
 
 from shuiyuan_auto_reply.retry import async_retry
 
-from .constants import *
-from .objects import *
+from .constants import (
+    action_url,
+    default_user_agent,
+    download_url,
+    get_cookies_url,
+    get_topic_url,
+    get_user_url,
+    post_search_url,
+    reply_url,
+    upload_url,
+    user_search_url,
+    voter_url,
+)
+from .objects import (
+    ImageUploadResponse,
+    ImageURL,
+    PostDetails,
+    PostSearchResult,
+    TopicDetails,
+    TopicSearchResult,
+    User,
+    UserActions,
+    VoterDetails,
+)
+from .reply_utils import remove_shuiyuan_signature
 
 
 class CookiesFileNotFoundError(Exception):
     """Custom exception for when the cookies file is not found."""
 
-    pass
-
 
 class CSRFTokenNotFoundError(Exception):
     """Custom exception for when the CSRF token is not found in the response."""
 
-    pass
+
+class ShuiyuanAPIError(Exception):
+    """Custom exception for when a Shuiyuan API request fails."""
 
 
 class ShuiyuanModel:
@@ -127,8 +150,8 @@ class ShuiyuanModel:
         response = await cls._rate_limited_request("get", get_cookies_url)
 
         # now let's try to get CSRF Token from response
-        format = r'<meta name="csrf-token" content="([^"]+)"[^>]*>'
-        match = re.search(format, await response.text())
+        csrf_re = r'<meta name="csrf-token" content="([^"]+)"[^>]*>'
+        match = re.search(csrf_re, await response.text())
         if not match:
             raise CSRFTokenNotFoundError(
                 "[INITIALIZATION] "
@@ -198,12 +221,12 @@ class ShuiyuanModel:
         :param reply_to_post_number: The post number to reply to.
         """
 
-        # First we construct the form data we need to post
-        form_data = aiohttp.FormData()
-        form_data.add_field("raw", raw)
-        form_data.add_field("topic_id", str(topic_id))
+        # First we construct the form data we need to post. A plain dict is
+        # re-encoded on every attempt, while an aiohttp.FormData can only be
+        # sent once on older aiohttp versions, which broke the 429 retry.
+        form_data = {"raw": raw, "topic_id": str(topic_id)}
         if reply_to_post_number is not None:
-            form_data.add_field("reply_to_post_number", str(reply_to_post_number))
+            form_data["reply_to_post_number"] = str(reply_to_post_number)
 
         # OK, let's post it (retry a bounded number of times on rate limiting)
         max_attempts = 5
@@ -217,9 +240,11 @@ class ShuiyuanModel:
                 return
             elif response.status == 429 and attempt < max_attempts - 1:
                 logging.warning(f"Failed to reply to post: {await response.text()}")
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(2**attempt)
             else:
-                raise Exception(f"Failed to reply to post: {await response.text()}")
+                raise ShuiyuanAPIError(
+                    f"Failed to reply to post: {await response.text()}"
+                )
 
     @staticmethod
     def remove_shuiyuan_signature(text: str) -> str:
@@ -229,8 +254,7 @@ class ShuiyuanModel:
         :param text: The text from which to remove the signature.
         :return: The text without the signature.
         """
-        sig_re = r"<div data-signature>.*?</div>"
-        return re.sub(sig_re, "", text, flags=re.DOTALL).strip()
+        return remove_shuiyuan_signature(text)
 
     @async_retry(log_traceback=True)
     async def get_topic_details(self, topic_id: int) -> TopicDetails:
@@ -244,7 +268,9 @@ class ShuiyuanModel:
             "get", f"{get_topic_url}/{topic_id}.json"
         )
         if response.status != 200:
-            raise Exception(f"Failed to get topic details: {await response.text()}")
+            raise ShuiyuanAPIError(
+                f"Failed to get topic details: {await response.text()}"
+            )
 
         data = await response.json()
         return from_dict(TopicDetails, data)
@@ -263,7 +289,9 @@ class ShuiyuanModel:
             logging.warning(f"User '{username}' not found.")
             return None
         elif response.status != 200:
-            raise Exception(f"Failed to get user details: {await response.text()}")
+            raise ShuiyuanAPIError(
+                f"Failed to get user details: {await response.text()}"
+            )
 
         data = await response.json()
         user_fields = data.get("user")
@@ -282,7 +310,9 @@ class ShuiyuanModel:
             "get", f"{reply_url}/{post_id}.json"
         )
         if response.status != 200:
-            raise Exception(f"Failed to get post details: {await response.text()}")
+            raise ShuiyuanAPIError(
+                f"Failed to get post details: {await response.text()}"
+            )
 
         data = await response.json()
         return from_dict(PostDetails, data)
@@ -303,7 +333,9 @@ class ShuiyuanModel:
             f"{get_topic_url}/{topic_id}/{post_number}.json",
         )
         if response.status != 200:
-            raise Exception(f"Failed to get post details: {await response.text()}")
+            raise ShuiyuanAPIError(
+                f"Failed to get post details: {await response.text()}"
+            )
 
         data = await response.json()
         post_stream = data.get("post_stream", {})
@@ -315,7 +347,7 @@ class ShuiyuanModel:
             None,
         )
         if not post_data:
-            raise Exception(
+            raise ShuiyuanAPIError(
                 f"Post with number {post_number} not found in topic {topic_id}"
             )
 
@@ -352,7 +384,9 @@ class ShuiyuanModel:
             params={"post_ids[]": post_ids, "include_raw": "true"},
         )
         if response.status != 200:
-            raise Exception(f"Failed to get posts batch: {await response.text()}")
+            raise ShuiyuanAPIError(
+                f"Failed to get posts batch: {await response.text()}"
+            )
 
         data = await response.json()
         post_stream = data.get("post_stream", {})
@@ -372,7 +406,7 @@ class ShuiyuanModel:
             params={"post_id": post_id, "poll_name": "poll", "limit": 999},
         )
         if response.status != 200:
-            raise Exception(f"Failed to get voters: {await response.text()}")
+            raise ShuiyuanAPIError(f"Failed to get voters: {await response.text()}")
 
         voter_data = await response.json()
         return from_dict(VoterDetails, voter_data)
@@ -395,7 +429,9 @@ class ShuiyuanModel:
             },
         )
         if response.status != 200:
-            raise Exception(f"Failed to get at notifications: {await response.text()}")
+            raise ShuiyuanAPIError(
+                f"Failed to get at notifications: {await response.text()}"
+            )
 
         data = await response.json()
         return from_dict(UserActions, data)
@@ -425,7 +461,7 @@ class ShuiyuanModel:
             "post", upload_url, data=form_data, timeout=aiohttp.ClientTimeout(total=10)
         )
         if response.status != 200:
-            raise Exception(f"Failed to upload image: {await response.text()}")
+            raise ShuiyuanAPIError(f"Failed to upload image: {await response.text()}")
 
         data = await response.json()
         return from_dict(ImageUploadResponse, data)
@@ -536,12 +572,12 @@ class ShuiyuanModel:
             return await response.read()
 
         if response.status not in {301, 302, 303, 307, 308}:
-            raise Exception(f"Failed to download image: {await response.text()}")
+            raise ShuiyuanAPIError(f"Failed to download image: {await response.text()}")
 
         redirect_url = response.headers.get("Location")
         response.release()
         if not redirect_url:
-            raise Exception(
+            raise ShuiyuanAPIError(
                 "Failed to download image: redirect response missing Location"
             )
 
@@ -554,7 +590,9 @@ class ShuiyuanModel:
                 allow_redirects=True,
             )
             if response.status != 200:
-                raise Exception(f"Failed to download image: {await response.text()}")
+                raise ShuiyuanAPIError(
+                    f"Failed to download image: {await response.text()}"
+                )
 
             return await response.read()
 
@@ -613,7 +651,7 @@ class ShuiyuanModel:
             "get", f"{user_search_url}", params={"term": term, "limit": 6}
         )
         if response.status != 200:
-            raise Exception(f"Failed to search users: {await response.text()}")
+            raise ShuiyuanAPIError(f"Failed to search users: {await response.text()}")
 
         data = await response.json()
         user_list = data.get("users", [])
@@ -634,7 +672,7 @@ class ShuiyuanModel:
         )
         if len(post_search_result) == 0:
             logging.warning(
-                f"No posts found for user with ID '{user_id}'."
+                f"No posts found for user with ID '{user_id}'. "
                 "User may exist but has not posted anything."
             )
             return None
@@ -677,7 +715,7 @@ class ShuiyuanModel:
             "get", f"{post_search_url}", params={"q": query}
         )
         if response.status != 200:
-            raise Exception(f"Failed to search posts: {await response.text()}")
+            raise ShuiyuanAPIError(f"Failed to search posts: {await response.text()}")
 
         data = await response.json()
         post_list = [
@@ -718,21 +756,15 @@ class ShuiyuanModel:
             term=term, latest=latest, username=username, topic_id=topic_id
         )
 
-        routines = []
-        for topic_title, posts in post_search_results.items():
-            topic_id = posts[0].topic_id
-            routines.append(
+        details_lists = await asyncio.gather(
+            *(
                 self.get_post_details_batch_by_topic_id(
-                    topic_id, [post.id for post in posts]
+                    posts[0].topic_id, [post.id for post in posts]
                 )
+                for posts in post_search_results.values()
             )
-
-        result = {}
-        details_lists = await asyncio.gather(*routines)
-        for topic_title, details_list in zip(post_search_results.keys(), details_lists):
-            result[topic_title] = details_list
-
-        return result
+        )
+        return dict(zip(post_search_results.keys(), details_lists, strict=True))
 
     @async_retry(log_traceback=True)
     async def query_recent_posts_by_topic_id(

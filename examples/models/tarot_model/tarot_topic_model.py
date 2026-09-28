@@ -1,16 +1,15 @@
 import asyncio
 import io
-import logging
 import math
 import os
-import traceback
 from typing import Optional
 
 import skia
 
 from shuiyuan_auto_reply.constants import settings
 from shuiyuan_auto_reply.fortune.fortune_model import FortuneModel
-from shuiyuan_auto_reply.shuiyuan.objects import User
+from shuiyuan_auto_reply.shuiyuan.objects import PostDetails, User
+from shuiyuan_auto_reply.shuiyuan.reply_utils import make_unique_reply
 from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
 from shuiyuan_auto_reply.shuiyuan.topic_model import BaseTopicModel
 from shuiyuan_auto_reply.tarot.tarot_group_data import (
@@ -20,7 +19,11 @@ from shuiyuan_auto_reply.tarot.tarot_group_data import (
 )
 from shuiyuan_auto_reply.tarot.tarot_model import TarotModel
 
+from ..common import handle_post_and_reply
 from .tarot_openrouter_model import TarotOpenRouterModel
+
+# Shuiyuan rejects posts longer than this
+_MAX_POST_LENGTH = 65535
 
 
 class TarotTopicModel(BaseTopicModel):
@@ -95,9 +98,7 @@ class TarotTopicModel(BaseTopicModel):
 
         # If the raw content contains "533", we return the text
         if "我要谈恋爱" in raw or "533" in raw:
-            return BaseTopicModel._make_unique_reply(
-                "鹊\n\n---\n[right]这是一条自动回复[/right]"
-            )
+            return make_unique_reply("鹊\n\n---\n[right]这是一条自动回复[/right]")
 
         return None
 
@@ -141,11 +142,8 @@ class TarotTopicModel(BaseTopicModel):
             result.img_url = urls[i]
 
         # Prepend the tarot group string
-        used_username = (
-            user.name if user.name is not None and user.name != "" else user.username
-        )
-        return BaseTopicModel._make_unique_reply(
-            f"你好！{used_username}，"
+        return make_unique_reply(
+            f"你好！{user.display_name}，"
             f"欢迎来到南瓜的塔罗牌自助占卜小屋！请注意占卜结果仅供娱乐参考哦！\n\n"
             f"{str(tarot_group)}"
             f"{text}"
@@ -164,9 +162,7 @@ class TarotTopicModel(BaseTopicModel):
             return None
 
         # OK, let's create the fortune model
-        username = (
-            user.name if user.name is not None and user.name != "" else user.username
-        )
+        username = user.display_name
         fortune_model = FortuneModel(username)
 
         # Generate an image for the fortune today. The rendering is CPU-bound
@@ -179,7 +175,7 @@ class TarotTopicModel(BaseTopicModel):
         response = await self.model.try_upload_image(bytes_buffer.getvalue(), True)
 
         # Return the fortune text
-        return BaseTopicModel._make_unique_reply(
+        return make_unique_reply(
             f"{username}，你好！请收下你的今日运势：\n\n{response.data}"
         )
 
@@ -195,7 +191,7 @@ class TarotTopicModel(BaseTopicModel):
             return None
 
         # OK, let's generate a reply
-        return BaseTopicModel._make_unique_reply(
+        return make_unique_reply(
             "帮助信息如下：\n"
             "1. 输入【塔罗牌】+问题，可以进行塔罗牌占卜 :crystal_ball:\n"
             "2. 输入【今日运势】，获取你的今日运势 :dotted_six_pointed_star:\n"
@@ -211,94 +207,32 @@ class TarotTopicModel(BaseTopicModel):
         :param post_id: The ID of the new post.
         :return: None
         """
-        # This is the text to reply to the post
-        text: Optional[str] = None
+        await handle_post_and_reply(self.model, post_id, self._generate_reply)
 
-        try:
-            # First let's try to get the post details. This is kept in its own
-            # try block: if it fails, post_details is unbound and the finally
-            # block below could not reference it.
-            post_details = await self.model.get_post_details(post_id)
-            post_user = User(
-                post_details.user_id,
-                post_details.username,
-                post_details.name,
+    async def _generate_reply(self, post: PostDetails, user: User) -> Optional[str]:
+        """
+        Build the reply for a post, checking the conditions in order.
+
+        :param post: The details of the post.
+        :param user: The user who posted the content.
+        :return: The text to reply with, or None if no condition is met.
+        """
+        raw = post.raw
+        # The help and fortune conditions exclude all later conditions
+        text = await self._help_condition(raw)
+        if text is None:
+            text = await self._fortune_condition(raw, user=user)
+        if text is None:
+            text = await self._tarot_condition(raw, user=user)
+        if text is None:
+            text = await self._533_condition(raw)
+
+        # If our reply is too long for Shuiyuan, reply with an error instead
+        if text is not None and len(text) > _MAX_POST_LENGTH:
+            text = make_unique_reply(
+                "抱歉，南瓜bot生成的回复内容过长，无法正常发送，请联系东川路笨蛋小南瓜处理"
             )
-
-            # If the member "raw" is not present, we should skip it
-            if post_details.raw is None:
-                logging.warning(f"Post {post_id} does not have raw content, skipping.")
-                return
-
-        except Exception:
-            logging.error(
-                f"Failed to get post details for {post_id}, "
-                f"traceback is as follows:\n{traceback.format_exc()}"
-            )
-            return
-
-        try:
-            # If the post is an auto-reply, we should skip it
-            if settings.auto_reply_tag in post_details.raw:
-                return
-
-            # OK, check the content of the post
-            # If the help condition is met, we should not check other conditions
-            text = await self._help_condition(post_details.raw)
-            if text is not None:
-                return
-
-            # Check fortune condition
-            # If the fortune condition is met, we should not check other conditions
-            text = await self._fortune_condition(
-                post_details.raw,
-                user=post_user,
-            )
-            if text is not None:
-                return
-
-            # Check tarot condition
-            text = await self._tarot_condition(
-                post_details.raw,
-                user=post_user,
-            )
-
-            # If the tarot condition is not met, check the 533 condition
-            if text is None:
-                text = await self._533_condition(post_details.raw)
-
-            # Shuiyuan has a maximum length for a post (65535 characters)
-            # If our reply is too long, we should raise an error
-            if text is not None and len(text) > 65535:
-                text = BaseTopicModel._make_unique_reply(
-                    "抱歉，南瓜bot生成的回复内容过长，无法正常发送，请联系东川路笨蛋小南瓜处理"
-                )
-                return
-
-        except Exception:
-            # If any error occurred while processing the post
-            logging.error(
-                f"Failed to process post {post_id}, "
-                f"traceback is as follows:\n{traceback.format_exc()}"
-            )
-            # We should reply to the post with an error message
-            text = BaseTopicModel._make_unique_reply(
-                "抱歉，南瓜bot遇到了一个错误，暂时无法处理您的请求，请稍后再试"
-            )
-
-        finally:
-            if text is not None:
-                try:
-                    await self.model.reply_to_post(
-                        text,
-                        self.topic_id,
-                        post_details.post_number,
-                    )
-                except Exception:
-                    logging.error(
-                        f"Failed to reply to post {post_id}, "
-                        f"traceback is as follows:\n{traceback.format_exc()}"
-                    )
+        return text
 
     async def _daily_routine(self) -> None:
         raise NotImplementedError(
