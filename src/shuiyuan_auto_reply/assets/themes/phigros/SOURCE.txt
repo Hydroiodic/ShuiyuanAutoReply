@@ -1,8 +1,17 @@
 Phigros theme visual source: Hydroiodic/phi-plugin-openclaw (derived from Catrong/phi-plugin).
 Background copied from resources/html/otherimg/phigros.png.
 Palette and slanted-panel conventions extracted from resources/html/common/common.css
-and resources/html/sign/sign.css. Rendering is reimplemented in Skia using this project's fonts.
+and resources/html/sign/sign.css. Rendering is reimplemented in Skia using the font stacks described below.
 Phigros, its logo and game assets remain the property of their respective owners.
 This is an unofficial visual theme, not an official Phigros integration.
 Upstream code license: GPL-3.0-only; see https://github.com/Hydroiodic/phi-plugin-openclaw.
-No upstream JavaScript/CSS implementation or fonts are bundled.
+No upstream JavaScript/CSS implementation is bundled.
+
+Fonts copied unchanged from resources/html/common/font/:
+- phi.ttf: PHI body font (Source Han Sans & Saira Hybrid).
+  Embedded copyright: Copyright 2014 Adobe Systems Incorporated. All Rights Reserved.
+  Embedded license: Apache License 2.0; see LICENSE-PHI.txt.
+- Aldrich-Regular.ttf: Aldrich display font, with PHI fallback for Chinese.
+  Copyright (c) Matthew Desmond, 2011. All rights reserved.
+  SIL Open Font License 1.1; see LICENSE-Aldrich.txt.
+Emoji and remaining missing glyphs use the project's existing Noto fonts.

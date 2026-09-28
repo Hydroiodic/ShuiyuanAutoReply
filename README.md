@@ -77,5 +77,6 @@ Python 接口：`FortuneModel(username, theme="phigros").generate_fortune()`。
 
 Phigros 主题提取自 `Hydroiodic/phi-plugin-openclaw` 的默认视觉样式：斜切面板、
 暗色半透明底、青蓝与金色强调色及 EZ/HD/IN/AT 四色条；背景资源已随本项目打包，
-字体使用本项目已有字体。资源来源见 `assets/themes/phigros/SOURCE.txt`。
+正文使用插件的 `phi.ttf`，标题优先使用 Aldrich，中文回退到 PHI，emoji 使用专用字体。
+两套主题字体独立打包，缺失字形回退到本项目的 Noto 字体。资源来源见 `assets/themes/phigros/SOURCE.txt`。
 不需要安装或运行 phi-plugin-openclaw，也不会读写它的配置。
