@@ -8,6 +8,7 @@ import skia
 
 from shuiyuan_auto_reply.constants import settings
 from shuiyuan_auto_reply.fortune.fortune_model import FortuneModel
+from shuiyuan_auto_reply.fortune.themes import theme_from_command
 from shuiyuan_auto_reply.shuiyuan.objects import PostDetails, User
 from shuiyuan_auto_reply.shuiyuan.reply_utils import make_unique_reply
 from shuiyuan_auto_reply.shuiyuan.shuiyuan_model import ShuiyuanModel
@@ -163,7 +164,11 @@ class TarotTopicModel(BaseTopicModel):
 
         # OK, let's create the fortune model
         username = user.display_name
-        fortune_model = FortuneModel(username)
+        try:
+            theme = theme_from_command(raw)
+        except ValueError as exc:
+            return make_unique_reply(str(exc))
+        fortune_model = FortuneModel(username, theme=theme)
 
         # Generate an image for the fortune today. The rendering is CPU-bound
         # synchronous work, so run it off the event loop.
@@ -194,7 +199,7 @@ class TarotTopicModel(BaseTopicModel):
         return make_unique_reply(
             "帮助信息如下：\n"
             "1. 输入【塔罗牌】+问题，可以进行塔罗牌占卜 :crystal_ball:\n"
-            "2. 输入【今日运势】，获取你的今日运势 :dotted_six_pointed_star:\n"
+            "2. 输入【今日运势】，默认洛谷主题；输入【今日运势】【Phigros】切换主题 :dotted_six_pointed_star:\n"
             "3. 输入533或某些变体，可以获得鹊的祝福 :bird:\n"
             "4. 输入【帮助】，可以查看本帮助信息"
         )

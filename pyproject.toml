@@ -53,6 +53,8 @@ include = ["shuiyuan_auto_reply*"]
 [tool.setuptools.package-data]
 shuiyuan_auto_reply = [
     "assets/tarot_data.json",
+    "assets/themes/phigros/*.png",
+    "assets/themes/phigros/*.txt",
     "assets/tarot_img/*.jpg",
     "assets/fonts/Noto_Color_Emoji/*.ttf",
     "assets/fonts/Noto_Color_Emoji/*.txt",

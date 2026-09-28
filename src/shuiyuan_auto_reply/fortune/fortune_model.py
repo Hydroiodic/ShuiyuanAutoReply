@@ -7,7 +7,6 @@ from .constants import (
     ToDoData,
     bg_size,
     detail_font,
-    detail_size,
     emoji_font,
     emoji_pattern,
     fortune_font,
@@ -19,19 +18,20 @@ from .constants import (
     to_do_font,
     to_do_font_bold,
     to_do_list,
-    to_do_size,
     too_lucky,
     too_lucky_not_to_do,
     too_unlucky,
     too_unlucky_to_do,
 )
+from .themes import FortuneTheme, resolve_theme
 
 
 class FortuneModel:
 
-    def __init__(self, username: str):
+    def __init__(self, username: str, theme: str | FortuneTheme = "default"):
         # Create the Skia surface (equivalent to PIL Image)
-        self.surface = skia.Surface(bg_size[0], bg_size[1])
+        self.theme = resolve_theme(theme) if isinstance(theme, str) else theme
+        self.surface = skia.Surface(*self.theme.size)
         self.canvas = self.surface.getCanvas()
         self.username = username
 
@@ -218,22 +218,9 @@ class FortuneModel:
         fortune = random.choice(fortune_list)
         to_do_and_not_to_do = self._sample_to_do(fortune)
 
-        # Draw the title and fortune text
-        self._draw_title_for_fortune(fortune)
-
-        # ToDos and their details
-        self._draw_one_to_do_and_not_to_do(
-            fortune,
-            to_do_and_not_to_do[0],
-            to_do_and_not_to_do[2],
-            275.0 + to_do_size + detail_size,
-        )
-        self._draw_one_to_do_and_not_to_do(
-            fortune,
-            to_do_and_not_to_do[1],
-            to_do_and_not_to_do[3],
-            375.0 + to_do_size + detail_size,
-        )
+        # Each render starts clean; theme selection never changes the draw data.
+        self.canvas.clear(skia.ColorWHITE)
+        self.theme.draw(self, fortune, to_do_and_not_to_do)
 
         # Return the Skia image
         return self.surface.makeImageSnapshot()

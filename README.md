@@ -62,3 +62,20 @@ pip install -e ".[dev]"          # 运行 examples/backend.py 还需要 ".[serve
 2. **Test**：安装依赖并运行 `pytest`。
 3. **Build wheel**：用 `python -m build` 打包 sdist 和 wheel，确认资源文件已打进 wheel，并作为 `shuiyuan-auto-reply-dist` 工件上传，可在 Actions 运行页面下载。
 4. **Publish GitHub release**：推送 `v*` 标签（如 `v0.1.0`）时，把打包好的文件发布到对应的 GitHub Release。
+
+### 今日运势图片主题
+
+塔罗回复模块中的 `【今日运势】` 支持主题选择，未指定时保持原来的洛谷样式：
+
+- `【今日运势】` / `【今日运势】【默认】` / `【今日运势】【洛谷】`
+- `【今日运势】【Phigros】`（英文主题名不区分大小写）
+
+Python 接口：`FortuneModel(username, theme="phigros").generate_fortune()`。
+`fortune/themes.py` 统一注册主题标识、名称、画布大小与绘制函数。主题只影响显示，
+运势和宜忌仍共用原有抽取逻辑；塔罗牌面、正逆位以及图片缓存保持不变。
+新增主题可注册新的 `FortuneTheme`，不需要复制抽取或上传流程。
+
+Phigros 主题提取自 `Hydroiodic/phi-plugin-openclaw` 的默认视觉样式：斜切面板、
+暗色半透明底、青蓝与金色强调色及 EZ/HD/IN/AT 四色条；背景资源已随本项目打包，
+字体使用本项目已有字体。资源来源见 `assets/themes/phigros/SOURCE.txt`。
+不需要安装或运行 phi-plugin-openclaw，也不会读写它的配置。
